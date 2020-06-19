@@ -1,0 +1,63 @@
+<launch>
+  <arg name="mav_name" default="$(optenv MAV_NAME)"/>
+
+  <!--<arg name="use_hires" default="false"/> -->
+  <arg name="cam_name" default="dfc"/>
+
+  <arg name="use_vicon" default="false"/>
+  <arg name="odom_topic" value="odom" if="$(arg use_vicon)"/>
+  <arg name="odom_topic" value="quadrotor_ukf/control_odom" unless="$(arg use_vicon)"/>
+  <arg name="odom_topic_throttled" value="quadrotor_ukf/control_odom_throttled"/>
+
+  <arg name="origin_tag_id" default="120"/>
+  <arg name="origin_tag_size" default="0.15"/>
+
+  <include file="$(find multi_mav_manager)/launch/dragonfly/multimaster_dragonfly_remote.launch">
+    <arg name="mav_name" value="$(arg mav_name)"/>
+  </include>
+
+  <!--
+  <include file="$(find snavquad_interface)/launch/snav_tf_pub.launch">
+    <arg name="pub_odom_base_link" value="true"/>
+  </include> -->
+
+  <group ns="$(arg mav_name)">
+
+    <node pkg="tag_swarm"
+      type="tag_manager"
+      name="tag_manager"
+      clear_params="true"
+      output="screen">
+      <rosparam file="$(find tag_swarm)/config/tag_swarm_params.yaml" />
+      <param name="origin_tag_id" value="$(arg origin_tag_id)"/>
+      <param name="origin_tag_size" value="$(arg origin_tag_size)"/>
+      <remap from="odom" to="$(arg odom_topic_throttled)"/>
+      <remap from="tag_poses" to="$(arg cam_name)/apriltag_pose_estimator/apriltag_poses"/>
+      <remap from="world_cmd_vel" to="cmd_vel"/>
+    </node>
+
+    <node pkg="tag_swarm"
+      type="tag_search"
+      name="tag_search"
+      clear_params="true"
+      output="screen">
+      <rosparam file="$(find tag_swarm)/config/tag_swarm_params.yaml" />
+      <param name="search_yaw" value="0.4"/>
+      <param name="loop_rate" value="2.0"/>
+      <param name="tag_id" value="$(arg origin_tag_id)"/>
+      <remap from="odom" to="$(arg odom_topic_throttled)"/>
+      <remap from="tag_poses" to="$(arg cam_name)/apriltag_pose_estimator/apriltag_poses"/>
+    </node>
+
+    <!--
+    <node pkg="tag_swarm" type="tag_search.py" name="tag_search">
+      <param name="tag_id" value="$(arg origin_tag_id)"/>
+    </node> -->
+
+    <include file="$(find tag_swarm)/launch/$(arg cam_name)_tag_detect.launch">
+      <arg name="tag_id" value="$(arg origin_tag_id)"/>
+      <arg name="tag_size" value="$(arg origin_tag_size)"/>
+    </include>
+
+  </group>
+</launch>

@@ -1,0 +1,37 @@
+<launch>
+
+  <arg name="cam_name" default="dfc"/>
+
+  <arg name="image" default="image_raw"/>
+  <arg name="border_size" default="2"/>
+
+  <arg name="tag_id" default="122"/>
+  <arg name="tag_size" default="0.2"/>
+
+  <arg name="nodelet_manager_name" default="vio_nodelet_man"/>
+
+  <group ns="$(arg cam_name)">
+
+    <node pkg="apriltag_ros" type="apriltag_detector_node"
+      name="apriltag_detector" output="screen">
+      <param name="family" type="int" value="0"/>
+      <param name="type" type="int" value="0"/> <!-- 0 - MIT, 1 - UMICH-->
+      <param name="black_border" type="int" value="$(arg border_size)"/>
+      <remap from="~image" to="$(arg image)"/>
+      <remap from="~tags" to="tags"/>
+      <remap from="~disp" to="disp"/>
+    </node>
+
+    <node pkg="apriltag_ros" name="apriltag_pose_estimator"
+      type="apriltag_pose_estimator" output="screen">
+      <remap from="~apriltags" to="tags"/>
+      <remap from="~camera_info" to="fisheye/camera_info"/>
+      <remap from="~transform" to="transform_cam_apriltag"/>
+      <param name="broadcast_tf" type="bool" value="false"/>
+      <param name="auto_disconnect" type="bool" value="false"/>
+      <rosparam param="tag_descriptions" subst_value="true">[
+        {id: $(arg tag_id), size: $(arg tag_size)}]
+      </rosparam>
+    </node>
+  </group>
+</launch>

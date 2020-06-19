@@ -1,0 +1,52 @@
+<launch>
+  <arg name="cam_name" default="hires"/>
+  <arg name="nodelet_manager_name" default="hires_nodelet_manager"/>
+  <arg name="skip_n_frames" default="0"/>
+  <arg name="do_rectification" default="false"/>
+  <arg name="width" default="1280"/>
+  <arg name="height" default="720"/>
+
+  <arg name="image" default="image_raw"/>
+  <arg name="border_size" default="2"/>
+
+  <arg name="tag_id" default="0"/>
+  <arg name="tag_size" default="0.15"/>
+
+  <group ns="$(arg cam_name)">
+    <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager_name)" args="manager" output="screen"/>
+    <!-- camera driver nodelet -->
+    <node pkg="nodelet" type="nodelet" name="snap_cam_nodelet"
+    args="load snap_cam_ros/driver $(arg nodelet_manager_name)">
+      <param name="camera_name" value="$(arg cam_name)"/>
+      <param name="format" value="1"/>
+      <param name="camera_number" value="0"/>
+      <param name="width" value="$(arg width)"/>
+      <param name="height" value="$(arg height)"/>
+      <param name="frame_id" value="hires"/>
+      <param name="skip_n_frames" value="$(arg skip_n_frames)"/>
+      <param name="yuv_remap" value="mono"/>
+    </node>
+  </group>
+
+  <node pkg="apriltag_ros" type="apriltag_detector_node"
+    name="apriltag_detector" output="screen" ns="$(arg cam_name)">
+    <param name="family" type="int" value="0"/>
+    <param name="type" type="int" value="0"/> <!-- 0 - MIT, 1 - UMICH-->
+    <param name="black_border" type="int" value="$(arg border_size)"/>
+    <remap from="~image" to="$(arg image)"/>
+    <remap from="~tags" to="tags"/>
+    <remap from="~disp" to="disp"/>
+  </node>
+
+  <node pkg="apriltag_ros" name="apriltag_pose_estimator"
+    type="apriltag_pose_estimator" output="screen" ns="$(arg cam_name)">
+    <remap from="~apriltags" to="tags"/>
+    <remap from="~camera_info" to="camera_info"/>
+    <remap from="~transform" to="transform_cam_apriltag"/>
+    <param name="broadcast_tf" type="bool" value="false"/>
+    <param name="auto_disconnect" type="bool" value="false"/>
+    <rosparam param="tag_descriptions" subst_value="true">[
+      {id: $(arg tag_id), size: $(arg tag_size)}]
+    </rosparam>
+  </node>
+</launch>
