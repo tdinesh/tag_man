@@ -204,7 +204,7 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::Transfo
 
     gtsam::Pose3 x_initial(rot_initial,pt_initial);
 
-    gtsam::Vector6 poseNoise_initial;
+    gtsam::Vector poseNoise_initial;
     poseNoise_initial << (gtsam::Vector3::Constant(0.2), gtsam::Vector3::Constant(0.5));// 0.2 rad on roll,pitch,yaw and 50cm std on x,y,z
     gtsam::SharedDiagonal P_initial = gtsam::noiseModel::Diagonal::Sigmas(poseNoise_initial, true);
 
