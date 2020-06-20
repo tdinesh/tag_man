@@ -1,0 +1,7 @@
+<launch>
+  <param name="use_sim_time" value="true"/>
+
+
+  <node name="temp_republish" type="republish" pkg="image_transport" output="screen" args="compressed in:=image_raw raw out:=image_raw" />
+
+</launch>

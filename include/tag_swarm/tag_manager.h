@@ -27,6 +27,12 @@
 #include <kr_mav_manager/Vec4.h>
 #include <kr_mav_manager/GoalTimed.h>
 
+#include <gtsam/nonlinear/ExtendedKalmanFilter.h>
+#include <gtsam/inference/Symbol.h>
+#include <gtsam/slam/PriorFactor.h>
+#include <gtsam/slam/BetweenFactor.h>
+#include <gtsam/geometry/Point2.h>
+
 class TAGManager
 {
   public:
@@ -64,6 +70,8 @@ class TAGManager
     bool transition(const std::string &tracker_str);
 
     void cmd_vel_cb(const geometry_msgs::Twist::ConstPtr &msg);
+
+    void do_ekf(geometry_msgs::Pose& ps_cam_tag);
 
     ros::NodeHandle nh_;
     ros::NodeHandle priv_nh_;
@@ -104,6 +112,12 @@ class TAGManager
     // TODO aw: make new variable in case global origin isn't needed
 
     std::string world_frame_, common_origin_frame_;
+
+    bool gtsam_init_;
+
+    std::unique_ptr<gtsam::ExtendedKalmanFilter<gtsam::Point2> > ekf_;
+
+    int symbol_cnt_;
 };
 
 #endif /* TAG_MANAGER_H */

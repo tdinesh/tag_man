@@ -20,14 +20,6 @@
 static const std::string line_tracker_min_jerk("std_trackers/LineTrackerMinJerk");
 static const std::string traj_tracker("std_trackers/TrajectoryTracker");
 
-/*
-#include <gtsam/nonlinear/ExtendedKalmanFilter.h>
-#include <gtsam/inference/Symbol.h>
-#include <gtsam/slam/PriorFactor.h>
-#include <gtsam/slam/BetweenFactor.h>
-#include <gtsam/geometry/Point2.h>
-*/
-
 // Constructor (init)
 TAGManager::TAGManager(std::string ns)
     : nh_(ns),
@@ -37,11 +29,13 @@ TAGManager::TAGManager(std::string ns)
     line_tracker_min_jerk_client_(nh_, "trackers_manager/line_tracker_min_jerk/LineTracker", true),
     trajectory_tracker_client_(nh_, "trackers_manager/trajectory_tracker/TrajectoryTracker", true),
     global_offset_init_(false),
-    tf_listener_(tf_buffer_)
+    tf_listener_(tf_buffer_),
+    gtsam_init_(false),
+    symbol_cnt_(0)
 {
   //std::shared_ptr<tf2_ros::TransformListener> tf_listener_(new tf2_ros::TransformListener(tf_buffer_));
 
-  const double server_wait_time = 3.0;
+  const double server_wait_time = 0.5;
   if (!line_tracker_min_jerk_client_.waitForServer(ros::Duration(server_wait_time))) {
     ROS_ERROR("LineTrackerMinJerkAction server not found.");
   }
@@ -51,7 +45,7 @@ TAGManager::TAGManager(std::string ns)
   }
 
   odom_tag_pub_ = nh_.advertise<nav_msgs::Odometry>("odom_tag", 10);
-  odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("odom", 1, boost::bind(&TAGManager::odometry_cb, this, _1));
+  //odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("odom", 1, boost::bind(&TAGManager::odometry_cb, this, _1));
 
   traj_sub_ = nh_.subscribe<kr_tracker_msgs::TrajectoryTrackerGoal>("traj", 1, boost::bind(&TAGManager::traj_cb, this, _1));
 
@@ -78,6 +72,185 @@ TAGManager::TAGManager(std::string ns)
 
   srv_goto_ = priv_nh_.advertiseService("goTo", &TAGManager::goTo_cb, this);
   srv_goto_timed_ = priv_nh_.advertiseService("goToTimed", &TAGManager::goToTimed_cb, this);
+
+}
+
+void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr& msg)
+{
+  //Find tag with id same as origin tag
+  bool found_tag = false;
+  unsigned int tag_ind = 0;
+
+  for(unsigned int i = 0; i < msg->apriltags.size(); i++)
+  {
+    if(origin_tag_id_ == msg->apriltags[i].id)
+    {
+      tag_ind = i;
+      found_tag = true;
+      break;
+    }
+  }
+
+  if(!found_tag)
+    return;
+
+  geometry_msgs::Pose ps_cam_tag; //Tag pose in camera frame
+  ps_cam_tag = msg->posearray.poses[tag_ind];
+  // ROS_INFO("Tag in %s frame: lin = (%2.2f, %2.2f, %2.2f)",
+  //   msg->header.frame_id.c_str(),
+  //   ps_cam_tag.position.x,
+  //   ps_cam_tag.position.y,
+  //   ps_cam_tag.position.z);
+
+  geometry_msgs::TransformStamped tf_world_cam;
+  ros::Time cur = ros::Time::now();
+  try
+  {
+    //tf_world_cam = tf_buffer_.lookupTransform(world_frame_, msg->header.frame_id, msg->header.stamp);
+    tf_world_cam = tf_buffer_.lookupTransform(world_frame_, msg->header.frame_id, ros::Time(0));
+
+  }
+  catch(tf2::TransformException &ex)
+  {
+    ROS_WARN("%s",ex.what());
+    return;
+  }
+
+  geometry_msgs::Pose ps_world_tag; //Tag pose in world frame
+  tf2::doTransform(ps_cam_tag, ps_world_tag, tf_world_cam);
+
+  geometry_msgs::TransformStamped tf_world_tag;
+
+  tf_world_tag.header.stamp = msg->header.stamp;
+  tf_world_tag.header.frame_id = world_frame_;
+  tf_world_tag.child_frame_id = common_origin_frame_;
+
+  tf_world_tag.transform.translation.x = ps_world_tag.position.x;
+  tf_world_tag.transform.translation.y = ps_world_tag.position.y;
+  tf_world_tag.transform.translation.z = ps_world_tag.position.z;
+  tf_world_tag.transform.rotation = ps_world_tag.orientation;
+
+  //send the transform
+  tf_broadcaster_.sendTransform(tf_world_tag);
+
+
+  // ROS_INFO("Tag in %s frame: lin = (%2.2f, %2.2f, %2.2f)",
+  //   world_frame_.c_str(),
+  //   ps_world_tag.position.x,
+  //   ps_world_tag.position.y,
+  //   ps_world_tag.position.z);
+
+/*
+  if (!global_offset_init_){
+    tf_drift_global_ = tf_drift_global;
+    global_offset_init_ = true;
+  } else {
+    tf_drift_global_.setOrigin(
+      tf_drift_global_.getOrigin().lerp(tf_drift_global.getOrigin(), tag_filter_alpha_));
+    tf_drift_global_.setRotation(
+      tf_drift_global_.getRotation().slerp(tf_drift_global.getRotation(), tag_filter_alpha_));
+  }
+
+  // tf_drift_global_.setOrigin(tf_drift_global.getOrigin());
+  // tf_drift_global_.setRotation(tf_drift_global.getRotation());
+
+  ROS_INFO("Raw drift in global frame: lin = (%2.2f, %2.2f, %2.2f)",
+      tf_drift_global.getOrigin().getX(),
+      tf_drift_global.getOrigin().getY(),
+      tf_drift_global.getOrigin().getZ());
+
+  ROS_INFO("Filtered drift in global frame: lin = (%2.2f, %2.2f, %2.2f)",
+      tf_drift_global_.getOrigin().getX(),
+      tf_drift_global_.getOrigin().getY(),
+      tf_drift_global_.getOrigin().getZ());
+*/
+
+  //Query the tf world -> hires
+
+  //Transform pose to world frame
+
+  //Publish transform world to origin
+
+  do_ekf(ps_world_tag);
+
+}
+
+void TAGManager::do_ekf(geometry_msgs::Pose& ps_world_tag)
+{
+
+  ROS_INFO_STREAM("tag" << ps_world_tag);
+
+  if(!gtsam_init_)
+  {
+    // Create the Kalman Filter initialization point
+    gtsam::Point2 x_initial(ps_world_tag.position.x, ps_world_tag.position.y);
+    gtsam::SharedDiagonal P_initial = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(0.1, 0.1));
+
+    // Create Key for initial pose
+    gtsam::Symbol x0('x',symbol_cnt_);
+
+    // Create an ExtendedKalmanFilter object
+    ekf_.reset(new gtsam::ExtendedKalmanFilter<gtsam::Point2>(x0, x_initial, P_initial));
+
+    gtsam_init_ = true;
+
+    symbol_cnt_++;
+
+    return;
+  }
+
+
+  // Now predict the state at t=1, i.e. argmax_{x1} P(x1) = P(x1|x0) P(x0)
+  // In Kalman Filter notation, this is x_{t+1|t} and P_{t+1|t}
+  // For the Kalman Filter, this requires a motion model, f(x_{t}) = x_{t+1|t)
+  // Assuming the system is linear, this will be of the form f(x_{t}) = F*x_{t} + B*u_{t} + w
+  // where F is the state transition model/matrix, B is the control input model,
+  // and w is zero-mean, Gaussian white noise with covariance Q
+  // Note, in some models, Q is actually derived as G*w*G^T where w models uncertainty of some
+  // physical property, such as velocity or acceleration, and G is derived from physics
+  //
+  // For the purposes of this example, let us assume we are using a constant-position model and
+  // the controls are driving the point to the right at 1 m/s. Then, F = [1 0 ; 0 1], B = [1 0 ; 0 1]
+  // and u = [1 ; 0]. Let us also assume that the process noise Q = [0.1 0 ; 0 0.1].
+  gtsam::Vector u = gtsam::Vector2(0.0, 0.0);
+  gtsam::SharedDiagonal Q = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(0.1, 0.1), true);
+
+  gtsam::Symbol x0('x',symbol_cnt_ - 1);
+
+  // This simple motion can be modeled with a BetweenFactor
+  // Create Key for next pose
+  gtsam::Symbol x1('x',symbol_cnt_);
+  // Predict delta based on controls
+  gtsam::Point2 difference(0,0);
+  // Create Factor
+  gtsam::BetweenFactor<gtsam::Point2> factor1(x0, x1, difference, Q);
+
+  // Predict the new value with the EKF class
+  gtsam::Point2 x1_predict = ekf_->predict(factor1);
+  gtsam::traits<gtsam::Point2>::Print(x1_predict, "X1 Predict");
+
+
+
+  // Now, a measurement, z1, has been received, and the Kalman Filter should be "Updated"/"Corrected"
+  // This is equivalent to saying P(x1|z1) ~ P(z1|x1)*P(x1)
+  // For the Kalman Filter, this requires a measurement model h(x_{t}) = \hat{z}_{t}
+  // Assuming the system is linear, this will be of the form h(x_{t}) = H*x_{t} + v
+  // where H is the observation model/matrix, and v is zero-mean, Gaussian white noise with covariance R
+  //
+  // For the purposes of this example, let us assume we have something like a GPS that returns
+  // the current position of the robot. Then H = [1 0 ; 0 1]. Let us also assume that the measurement noise
+  // R = [0.25 0 ; 0 0.25].
+  gtsam::SharedDiagonal R = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(0.25, 0.25), true);
+
+  // This simple measurement can be modeled with a PriorFactor
+  gtsam::Point2 z1(ps_world_tag.position.x, ps_world_tag.position.y);
+  gtsam::PriorFactor<gtsam::Point2> factor2(x1, z1, R);
+
+  // Update the Kalman Filter with the measurement
+  gtsam::Point2 x1_update = ekf_->update(factor2);
+  gtsam::traits<gtsam::Point2>::Print(x1_update, "X1 Update");
+
+  symbol_cnt_++;
 }
 
 bool TAGManager::goTo_cb(kr_mav_manager::Vec4::Request &req, kr_mav_manager::Vec4::Response &res)
@@ -285,101 +458,6 @@ bool TAGManager::goToTimed(float x, float y, float z, float yaw, float v_des, fl
            (relative ? " relative to the current position." : ""), duration.toSec());
 
   return this->transition(line_tracker_min_jerk);
-
-}
-
-void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr& msg)
-{
-  //Find tag with id same as origin tag
-  bool found_tag = false;
-  unsigned int tag_ind = 0;
-
-  for(unsigned int i = 0; i < msg->apriltags.size(); i++)
-  {
-    if(origin_tag_id_ == msg->apriltags[i].id)
-    {
-      tag_ind = i;
-      found_tag = true;
-      break;
-    }
-  }
-
-  if(!found_tag)
-    return;
-
-  geometry_msgs::Pose ps_cam_tag; //Tag pose in camera frame
-  ps_cam_tag = msg->posearray.poses[tag_ind];
-  // ROS_INFO("Tag in %s frame: lin = (%2.2f, %2.2f, %2.2f)",
-  //   msg->header.frame_id.c_str(),
-  //   ps_cam_tag.position.x,
-  //   ps_cam_tag.position.y,
-  //   ps_cam_tag.position.z);
-
-  geometry_msgs::TransformStamped tf_world_cam;
-  ros::Time cur = ros::Time::now();
-  try
-  {
-    tf_world_cam = tf_buffer_.lookupTransform(world_frame_, msg->header.frame_id, msg->header.stamp);
-  }
-  catch(tf2::TransformException &ex)
-  {
-    ROS_WARN("%s",ex.what());
-    return;
-  }
-
-  geometry_msgs::Pose ps_world_tag; //Tag pose in world frame
-  tf2::doTransform(ps_cam_tag, ps_world_tag, tf_world_cam);
-
-  geometry_msgs::TransformStamped tf_world_tag;
-
-  tf_world_tag.header.stamp = msg->header.stamp;
-  tf_world_tag.header.frame_id = world_frame_;
-  tf_world_tag.child_frame_id = common_origin_frame_;
-
-  tf_world_tag.transform.translation.x = ps_world_tag.position.x;
-  tf_world_tag.transform.translation.y = ps_world_tag.position.y;
-  tf_world_tag.transform.translation.z = ps_world_tag.position.z;
-  tf_world_tag.transform.rotation = ps_world_tag.orientation;
-
-  //send the transform
-  tf_broadcaster_.sendTransform(tf_world_tag);
-
-  // ROS_INFO("Tag in %s frame: lin = (%2.2f, %2.2f, %2.2f)",
-  //   world_frame_.c_str(),
-  //   ps_world_tag.position.x,
-  //   ps_world_tag.position.y,
-  //   ps_world_tag.position.z);
-
-/*
-  if (!global_offset_init_){
-    tf_drift_global_ = tf_drift_global;
-    global_offset_init_ = true;
-  } else {
-    tf_drift_global_.setOrigin(
-      tf_drift_global_.getOrigin().lerp(tf_drift_global.getOrigin(), tag_filter_alpha_));
-    tf_drift_global_.setRotation(
-      tf_drift_global_.getRotation().slerp(tf_drift_global.getRotation(), tag_filter_alpha_));
-  }
-
-  // tf_drift_global_.setOrigin(tf_drift_global.getOrigin());
-  // tf_drift_global_.setRotation(tf_drift_global.getRotation());
-
-  ROS_INFO("Raw drift in global frame: lin = (%2.2f, %2.2f, %2.2f)",
-      tf_drift_global.getOrigin().getX(),
-      tf_drift_global.getOrigin().getY(),
-      tf_drift_global.getOrigin().getZ());
-
-  ROS_INFO("Filtered drift in global frame: lin = (%2.2f, %2.2f, %2.2f)",
-      tf_drift_global_.getOrigin().getX(),
-      tf_drift_global_.getOrigin().getY(),
-      tf_drift_global_.getOrigin().getZ());
-*/
-
-  //Query the tf world -> hires
-
-  //Transform pose to world frame
-
-  //Publish transform world to origin
 
 }
 

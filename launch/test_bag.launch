@@ -1,0 +1,42 @@
+<launch>
+  <arg name="mav_name" default="dragonfly4"/>
+
+  <!--<arg name="use_hires" default="false"/> -->
+  <arg name="cam_name" default="dfc"/>
+
+  <arg name="use_vicon" default="false"/>
+  <arg name="odom_topic" value="odom" if="$(arg use_vicon)"/>
+  <arg name="odom_topic" value="quadrotor_ukf/control_odom" unless="$(arg use_vicon)"/>
+  <arg name="odom_topic_throttled" value="quadrotor_ukf/control_odom_throttled"/>
+
+  <arg name="origin_tag_id" default="125"/>
+  <arg name="origin_tag_size" default="0.3"/>
+
+  <group ns="$(arg mav_name)">
+
+    <node pkg="tag_swarm"
+      type="tag_manager"
+      name="tag_manager"
+      clear_params="true"
+      output="screen">
+      <rosparam file="$(find tag_swarm)/config/tag_swarm_params.yaml" />
+      <remap from="odom" to="$(arg odom_topic_throttled)"/>
+      <remap from="tag_poses" to="$(arg cam_name)/apriltag_pose_estimator/apriltag_poses"/>
+      <remap from="world_cmd_vel" to="cmd_vel"/>
+
+      <param name="origin_tag_id" value="$(arg origin_tag_id)"/>
+      <param name="origin_tag_size" value="$(arg origin_tag_size)"/>
+      <param name="world_frame" value="odom"/>
+      <param name="common_origin_frame" value="common_origin"/>
+
+    </node>
+
+    <node name="dfc_republish" type="republish" pkg="image_transport" output="screen" args="compressed in:=$(arg cam_name)/image_raw raw out:=$(arg cam_name)/image_raw" />
+
+    <include file="$(find tag_swarm)/launch/$(arg cam_name)_tag_detect.launch">
+      <arg name="tag_id" value="$(arg origin_tag_id)"/>
+      <arg name="tag_size" value="$(arg origin_tag_size)"/>
+    </include>
+
+  </group>
+</launch>

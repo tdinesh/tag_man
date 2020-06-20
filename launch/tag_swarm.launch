@@ -12,7 +12,7 @@
   <arg name="origin_tag_id" default="120"/>
   <arg name="origin_tag_size" default="0.15"/>
 
-  <include file="$(find multi_mav_manager)/launch/dragonfly/multimaster_dragonfly_remote.launch">
+  <include file="$(find kr_multi_mav_manager)/launch/dragonfly/multimaster_dragonfly_remote.launch">
     <arg name="mav_name" value="$(arg mav_name)"/>
   </include>
 
@@ -36,6 +36,7 @@
       <remap from="world_cmd_vel" to="cmd_vel"/>
     </node>
 
+    <!--
     <node pkg="tag_swarm"
       type="tag_search"
       name="tag_search"
@@ -47,7 +48,7 @@
       <param name="tag_id" value="$(arg origin_tag_id)"/>
       <remap from="odom" to="$(arg odom_topic_throttled)"/>
       <remap from="tag_poses" to="$(arg cam_name)/apriltag_pose_estimator/apriltag_poses"/>
-    </node>
+    </node> -->
 
     <!--
     <node pkg="tag_swarm" type="tag_search.py" name="tag_search">

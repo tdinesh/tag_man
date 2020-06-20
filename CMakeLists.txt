@@ -6,9 +6,9 @@ project(tag_swarm)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")
 
-#find_package(GTSAM REQUIRED)
-#message(ERROR ${GTSAM_INCLUDE_DIR})
-#message(ERROR ${GTSAM_VERSION})
+find_package(GTSAM REQUIRED)
+message(ERROR ${GTSAM_INCLUDE_DIR})
+message(ERROR ${GTSAM_VERSION})
 
 find_package(catkin REQUIRED
   roscpp
@@ -54,7 +54,7 @@ include_directories(include ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR})
 #include_directories(${GTSAM_INCLUDE_DIR})
 
 add_executable(tag_manager src/tag_manager.cpp)
-target_link_libraries(tag_manager ${catkin_LIBRARIES})
+target_link_libraries(tag_manager gtsam ${catkin_LIBRARIES})
 
 add_executable(tag_search src/tag_search.cpp)
 target_link_libraries(tag_search ${catkin_LIBRARIES})
