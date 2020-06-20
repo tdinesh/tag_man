@@ -204,15 +204,15 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::Transfo
 
     gtsam::Pose3 x_initial(rot_initial,pt_initial);
 
-    gtsam::Vector poseNoise_initial;
-    poseNoise_initial << (gtsam::Vector3::Constant(0.2), gtsam::Vector3::Constant(0.5));// 0.2 rad on roll,pitch,yaw and 50cm std on x,y,z
+    gtsam::Vector6 poseNoise_initial;
+    poseNoise_initial << gtsam::Vector3::Constant(0.2), gtsam::Vector3::Constant(0.5);// 0.2 rad on roll,pitch,yaw and 50cm std on x,y,z
     gtsam::SharedDiagonal P_initial = gtsam::noiseModel::Diagonal::Sigmas(poseNoise_initial, true);
 
     // Create Key for initial pose
     gtsam::Symbol x0('x',symbol_cnt_);
 
     gtsam::traits<gtsam::Pose3>::Print(x_initial, "X0 initial");
-    P_initial.print("P initial ");
+    P_initial->print("P initial ");
 
     // Create an ExtendedKalmanFilter object
     ekf_.reset(new gtsam::ExtendedKalmanFilter<gtsam::Pose3>(x0, x_initial, P_initial));
@@ -243,7 +243,7 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::Transfo
   //u << (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 
   gtsam::Vector6 process_noise;
-  process_noise << (gtsam::Vector3::Constant(0.05), gtsam::Vector3::Constant(0.1)); // 0.05 rad on roll,pitch,yaw and 10cm std on x,y,z
+  process_noise << gtsam::Vector3::Constant(0.05), gtsam::Vector3::Constant(0.1); // 0.05 rad on roll,pitch,yaw and 10cm std on x,y,z
   gtsam::SharedDiagonal Q = gtsam::noiseModel::Diagonal::Sigmas(process_noise, true);
   Q->print("Q proces noise ");
 
@@ -259,7 +259,7 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::Transfo
                        0, 1, 0,
                        0, 0, 1);
   gtsam::Pose3 difference(rot_diff,pt_diff);
-  difference->print("difference ");
+  difference.print("difference ");
 
   // Create Factor
   gtsam::BetweenFactor<gtsam::Pose3> factor1(x0, x1, difference, Q);
@@ -278,7 +278,7 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::Transfo
   // the current position of the robot. Then H = [1 0 ; 0 1]. Let us also assume that the measurement noise
   // R = [0.25 0 ; 0 0.25].
   gtsam::Vector6 measurement_noise;
-  measurement_noise << (gtsam::Vector3::Constant(0.05), gtsam::Vector3::Constant(0.1)); // 0.05 rad on roll,pitch,yaw and 10cm std on x,y,z
+  measurement_noise << gtsam::Vector3::Constant(0.05), gtsam::Vector3::Constant(0.1); // 0.05 rad on roll,pitch,yaw and 10cm std on x,y,z
   gtsam::SharedDiagonal R = gtsam::noiseModel::Diagonal::Sigmas(measurement_noise, true);
   R->print("R measurement noise ");
 
@@ -296,6 +296,8 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::Transfo
   // Update the Kalman Filter with the measurement
   gtsam::Pose3 x1_update = ekf_->update(factor2);
   gtsam::traits<gtsam::Pose3>::Print(x1_update, "X1 Update");
+
+  ROS_INFO("Done");
 
   symbol_cnt_++;
 
