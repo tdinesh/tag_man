@@ -29,11 +29,14 @@
       clear_params="true"
       output="screen">
       <rosparam file="$(find tag_swarm)/config/tag_swarm_params.yaml" />
-      <param name="origin_tag_id" value="$(arg origin_tag_id)"/>
-      <param name="origin_tag_size" value="$(arg origin_tag_size)"/>
       <remap from="odom" to="$(arg odom_topic_throttled)"/>
       <remap from="tag_poses" to="$(arg cam_name)/apriltag_pose_estimator/apriltag_poses"/>
-      <remap from="world_cmd_vel" to="cmd_vel"/>
+      <remap from="odom_cmd_vel" to="cmd_vel"/>
+
+      <param name="origin_tag_id" value="$(arg origin_tag_id)"/>
+      <param name="origin_tag_size" value="$(arg origin_tag_size)"/>
+      <param name="odom_frame" value="odom"/>
+      <param name="global_frame" value="global_origin"/>
     </node>
 
     <!--

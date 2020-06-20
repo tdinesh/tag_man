@@ -112,7 +112,7 @@ class TAGManager
     // TODO aw: should the tag always be called the origin? For now yes
     // TODO aw: make new variable in case global origin isn't needed
 
-    std::string world_frame_, common_origin_frame_;
+    std::string odom_frame_, global_frame_;
 
     bool gtsam_init_;
 

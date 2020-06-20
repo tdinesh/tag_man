@@ -54,7 +54,7 @@ TAGManager::TAGManager(std::string ns)
 
   // cmd_vel subscriber
   cmd_vel_sub_ = nh_.subscribe<geometry_msgs::Twist>("tag_cmd_vel", 1, boost::bind(&TAGManager::cmd_vel_cb,this, _1));
-  cmd_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("world_cmd_vel", 10);
+  cmd_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("odom_cmd_vel", 10);
 
   // Services
   srv_transition_ = nh_.serviceClient<kr_tracker_msgs::Transition>("trackers_manager/transition");
@@ -62,8 +62,8 @@ TAGManager::TAGManager(std::string ns)
   priv_nh_.param("tag_filter_alpha", tag_filter_alpha_, 0.1f);
   priv_nh_.param("origin_tag_id", origin_tag_id_, 0);
 
-  priv_nh_.param<std::string>("world_frame", world_frame_, "world");
-  priv_nh_.param<std::string>("common_origin_frame", common_origin_frame_, "common_origin");
+  priv_nh_.param<std::string>("odom_frame", odom_frame_, "odom");
+  priv_nh_.param<std::string>("global_frame", global_frame_, "global_origin");
 
   // Tag_swarm
   //tf_drift_global_.setIdentity();
@@ -102,12 +102,12 @@ void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr&
   //   ps_cam_tag.position.y,
   //   ps_cam_tag.position.z);
 
-  geometry_msgs::TransformStamped tf_world_cam;
+  geometry_msgs::TransformStamped tf_odom_cam;
   ros::Time cur = ros::Time::now();
   try
   {
-    //tf_world_cam = tf_buffer_.lookupTransform(world_frame_, msg->header.frame_id, msg->header.stamp);
-    tf_world_cam = tf_buffer_.lookupTransform(world_frame_, msg->header.frame_id, ros::Time(0));
+    //tf_odom_cam = tf_buffer_.lookupTransform(odom_frame_, msg->header.frame_id, msg->header.stamp);
+    tf_odom_cam = tf_buffer_.lookupTransform(odom_frame_, msg->header.frame_id, ros::Time(0));
 
   }
   catch(tf2::TransformException &ex)
@@ -116,29 +116,29 @@ void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr&
     return;
   }
 
-  geometry_msgs::Pose ps_world_tag; //Tag pose in world frame
-  tf2::doTransform(ps_cam_tag, ps_world_tag, tf_world_cam);
+  geometry_msgs::Pose ps_odom_tag; //Tag pose in odom frame
+  tf2::doTransform(ps_cam_tag, ps_odom_tag, tf_odom_cam);
 
-  geometry_msgs::TransformStamped tf_world_tag;
+  geometry_msgs::TransformStamped tf_odom_tag;
 
-  tf_world_tag.header.stamp = msg->header.stamp;
-  tf_world_tag.header.frame_id = world_frame_;
-  tf_world_tag.child_frame_id = common_origin_frame_;
+  tf_odom_tag.header.stamp = msg->header.stamp;
+  tf_odom_tag.header.frame_id = odom_frame_;
+  tf_odom_tag.child_frame_id = global_frame_;
 
-  tf_world_tag.transform.translation.x = ps_world_tag.position.x;
-  tf_world_tag.transform.translation.y = ps_world_tag.position.y;
-  tf_world_tag.transform.translation.z = ps_world_tag.position.z;
-  tf_world_tag.transform.rotation = ps_world_tag.orientation;
+  tf_odom_tag.transform.translation.x = ps_odom_tag.position.x;
+  tf_odom_tag.transform.translation.y = ps_odom_tag.position.y;
+  tf_odom_tag.transform.translation.z = ps_odom_tag.position.z;
+  tf_odom_tag.transform.rotation = ps_odom_tag.orientation;
 
   //send the transform
-  tf_broadcaster_.sendTransform(tf_world_tag);
+  tf_broadcaster_.sendTransform(tf_odom_tag);
 
 
   // ROS_INFO("Tag in %s frame: lin = (%2.2f, %2.2f, %2.2f)",
-  //   world_frame_.c_str(),
-  //   ps_world_tag.position.x,
-  //   ps_world_tag.position.y,
-  //   ps_world_tag.position.z);
+  //   odom_frame_.c_str(),
+  //   ps_odom_tag.position.x,
+  //   ps_odom_tag.position.y,
+  //   ps_odom_tag.position.z);
 
 /*
   if (!global_offset_init_){
@@ -165,25 +165,25 @@ void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr&
       tf_drift_global_.getOrigin().getZ());
 */
 
-  //Query the tf world -> hires
+  //Query the tf odom -> hires
 
-  //Transform pose to world frame
+  //Transform pose to odom frame
 
-  //Publish transform world to origin
+  //Publish transform odom to origin
 
-  do_ekf(ps_world_tag);
+  do_ekf(ps_odom_tag);
 
 }
 
-void TAGManager::do_ekf(geometry_msgs::Pose& ps_world_tag)
+void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag)
 {
 
-  ROS_INFO_STREAM("tag" << ps_world_tag);
+  ROS_INFO_STREAM("tag" << ps_odom_tag);
 
   if(!gtsam_init_)
   {
     // Create the Kalman Filter initialization point
-    gtsam::Point3 x_initial(ps_world_tag.position.x, ps_world_tag.position.y, ps_world_tag.position.z);
+    gtsam::Point3 x_initial(ps_odom_tag.position.x, ps_odom_tag.position.y, ps_odom_tag.position.z);
     gtsam::SharedDiagonal P_initial = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.1, 0.1, 0.1));
 
     // Create Key for initial pose
@@ -243,7 +243,7 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_world_tag)
   gtsam::SharedDiagonal R = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.2, 0.2, 0.2), true);
 
   // This simple measurement can be modeled with a PriorFactor
-  gtsam::Point3 z1(ps_world_tag.position.x, ps_world_tag.position.y, ps_world_tag.position.z);
+  gtsam::Point3 z1(ps_odom_tag.position.x, ps_odom_tag.position.y, ps_odom_tag.position.z);
   gtsam::PriorFactor<gtsam::Point3> factor2(x1, z1, R);
 
   // Update the Kalman Filter with the measurement
@@ -276,11 +276,11 @@ void TAGManager::traj_cb(const kr_tracker_msgs::TrajectoryTrackerGoal::ConstPtr 
      (msg->waypoint_times.size() == 0 || msg->waypoint_times.size() == msg->waypoints.size()))
   {
 
-    geometry_msgs::TransformStamped tf_world_common;
+    geometry_msgs::TransformStamped tf_odom_global;
     ros::Time cur = ros::Time::now();
     try
     {
-      tf_world_common = tf_buffer_.lookupTransform(world_frame_, common_origin_frame_, ros::Time(0));
+      tf_odom_global = tf_buffer_.lookupTransform(odom_frame_, global_frame_, ros::Time(0));
     }
     catch(tf2::TransformException &ex)
     {
@@ -288,34 +288,34 @@ void TAGManager::traj_cb(const kr_tracker_msgs::TrajectoryTrackerGoal::ConstPtr 
       return;
     }
 
-    kr_tracker_msgs::TrajectoryTrackerGoal goal_world;
+    kr_tracker_msgs::TrajectoryTrackerGoal goal_odom;
 
     for(unsigned int i = 0; i < msg->waypoints.size(); i++)
     {
-      //convert pose in origin_frame to world_frame
-      geometry_msgs::Pose ps_origin_goal = msg->waypoints[i];
+      //convert pose in global_frame to odom_frame
+      geometry_msgs::Pose ps_global_goal = msg->waypoints[i];
 
       //tf2::Quaternion q_origin;
       //q_origin.setRPY(0.0, 0.0, 0.0);
-      //ps_origin_goal.orientation = tf2::toMsg(q_origin);
+      //ps_global_goal.orientation = tf2::toMsg(q_origin);
 
-      geometry_msgs::Pose ps_world_goal; //Tag pose in world frame
-      tf2::doTransform(ps_origin_goal, ps_world_goal, tf_world_common);
+      geometry_msgs::Pose ps_odom_goal; //Tag pose in odom frame
+      tf2::doTransform(ps_global_goal, ps_odom_goal, tf_odom_global);
 
       ROS_INFO("goal (%2.2f, %2.2f, %2.2f) in global frame: lin = (%2.2f, %2.2f, %2.2f) %2.2f",
-          ps_origin_goal.position.x,
-          ps_origin_goal.position.y,
-          ps_origin_goal.position.z,
-          ps_world_goal.position.x,
-          ps_world_goal.position.y,
-          ps_world_goal.position.z, msg->waypoint_times[i]);
+          ps_global_goal.position.x,
+          ps_global_goal.position.y,
+          ps_global_goal.position.z,
+          ps_odom_goal.position.x,
+          ps_odom_goal.position.y,
+          ps_odom_goal.position.z, msg->waypoint_times[i]);
 
-      goal_world.waypoints.push_back(ps_world_goal);
-      //goal_world.waypoint_times.push_back(msg->waypoint_times[i]);
+      goal_odom.waypoints.push_back(ps_odom_goal);
+      //goal_odom.waypoint_times.push_back(msg->waypoint_times[i]);
     }
 
-    trajectory_tracker_client_.sendGoal(goal_world);
-    //trajectory_tracker_client_.sendGoal(goal_world, boost::bind(&TAGManager::traj_done_callback, this, _1, _2),
+    trajectory_tracker_client_.sendGoal(goal_odom);
+    //trajectory_tracker_client_.sendGoal(goal_odom, boost::bind(&TAGManager::traj_done_callback, this, _1, _2),
     //                                       ClientType::SimpleActiveCallback(), ClientType::SimpleFeedbackCallback());
     ROS_ERROR("Tracking traj");
 
@@ -352,14 +352,14 @@ void TAGManager::odometry_cb(const nav_msgs::Odometry::ConstPtr &msg)
 
   last_odom_t_ = ros::Time::now();
 
-  geometry_msgs::Pose ps_world_odom; //odom in world frame
-  ps_world_odom = msg->pose.pose;
+  geometry_msgs::Pose ps_odom;
+  ps_odom = msg->pose.pose;
 
-  geometry_msgs::TransformStamped tf_common_world;
+  geometry_msgs::TransformStamped tf_global_odom;
   ros::Time cur = ros::Time::now();
   try
   {
-    tf_common_world = tf_buffer_.lookupTransform(common_origin_frame_, world_frame_, ros::Time(0));
+    tf_global_odom = tf_buffer_.lookupTransform(global_frame_, odom_frame_, ros::Time(0));
   }
   catch(tf2::TransformException &ex)
   {
@@ -367,25 +367,25 @@ void TAGManager::odometry_cb(const nav_msgs::Odometry::ConstPtr &msg)
     return;
   }
 
-  geometry_msgs::Pose ps_common_odom; //odom in common frame
-  tf2::doTransform(ps_world_odom, ps_common_odom, tf_common_world);
+  geometry_msgs::Pose ps_global_odom; //odom in global frame
+  tf2::doTransform(ps_odom, ps_global_odom, tf_global_odom);
 
-  //Publish odometry in the origin_frame
+  //Publish odometry in the global_frame
   nav_msgs::Odometry odom_tag;
   odom_tag.header = msg->header;
 
   //TODO populate twist correctly
-  odom_tag.pose.pose = ps_common_odom,
+  odom_tag.pose.pose = ps_global_odom,
   odom_tag_pub_.publish(odom_tag);
 }
 
 void TAGManager::cmd_vel_cb(const geometry_msgs::Twist::ConstPtr &msg)
 {
-  geometry_msgs::TransformStamped tf_world_common;
+  geometry_msgs::TransformStamped tf_odom_global;
   ros::Time cur = ros::Time::now();
   try
   {
-    tf_world_common = tf_buffer_.lookupTransform(world_frame_, common_origin_frame_, ros::Time(0));
+    tf_odom_global = tf_buffer_.lookupTransform(odom_frame_, global_frame_, ros::Time(0));
   }
   catch(tf2::TransformException &ex)
   {
@@ -394,37 +394,37 @@ void TAGManager::cmd_vel_cb(const geometry_msgs::Twist::ConstPtr &msg)
   }
 
   tf::Quaternion q;
-  tf::quaternionMsgToTF(tf_world_common.transform.rotation, q);
-  double yaw_world = tf::getYaw(q);
+  tf::quaternionMsgToTF(tf_odom_global.transform.rotation, q);
+  double yaw_odom = tf::getYaw(q);
 
   geometry_msgs::Twist goal;
-  goal.linear.x = msg->linear.x * std::cos(yaw_world) - msg->linear.y * std::sin(yaw_world);
-  goal.linear.y = msg->linear.x * std::sin(yaw_world) + msg->linear.y * std::cos(yaw_world);
+  goal.linear.x = msg->linear.x * std::cos(yaw_odom) - msg->linear.y * std::sin(yaw_odom);
+  goal.linear.y = msg->linear.x * std::sin(yaw_odom) + msg->linear.y * std::cos(yaw_odom);
   goal.linear.z = msg->linear.z;
   goal.angular.z = msg->angular.z;
 
-  //ROS_WARN("yaw %g", yaw_world*180/3.142);
+  //ROS_WARN("yaw %g", yaw_odom*180/3.142);
 
   cmd_vel_pub_.publish(goal);
 }
 
 bool TAGManager::goToTimed(float x, float y, float z, float yaw, float v_des, float a_des, bool relative, ros::Duration duration, ros::Time t_start)
 {
-  //convert pose in origin_frame to world_frame
-  geometry_msgs::Pose ps_origin_goal; //goal in origin frame
-  ps_origin_goal.position.x = x;
-  ps_origin_goal.position.y = y;
-  ps_origin_goal.position.z = z;
+  //convert pose in global_frame to odom_frame
+  geometry_msgs::Pose ps_global_goal; //goal in origin frame
+  ps_global_goal.position.x = x;
+  ps_global_goal.position.y = y;
+  ps_global_goal.position.z = z;
 
   tf2::Quaternion q_origin;
   q_origin.setRPY(0.0, 0.0, yaw);
-  ps_origin_goal.orientation = tf2::toMsg(q_origin);
+  ps_global_goal.orientation = tf2::toMsg(q_origin);
 
-  geometry_msgs::TransformStamped tf_world_common;
+  geometry_msgs::TransformStamped tf_odom_global;
   ros::Time cur = ros::Time::now();
   try
   {
-    tf_world_common = tf_buffer_.lookupTransform(world_frame_, common_origin_frame_, ros::Time(0));
+    tf_odom_global = tf_buffer_.lookupTransform(odom_frame_, global_frame_, ros::Time(0));
   }
   catch(tf2::TransformException &ex)
   {
@@ -432,20 +432,20 @@ bool TAGManager::goToTimed(float x, float y, float z, float yaw, float v_des, fl
     return false;
   }
 
-  geometry_msgs::Pose ps_world_goal; //Tag pose in world frame
-  tf2::doTransform(ps_origin_goal, ps_world_goal, tf_world_common);
+  geometry_msgs::Pose ps_odom_goal; //Tag pose in odom frame
+  tf2::doTransform(ps_global_goal, ps_odom_goal, tf_odom_global);
 
   //tf2::Quaternion q;
-  //tf2::fromMsg(ps_world_goal.orientation, q);
+  //tf2::fromMsg(ps_odom_goal.orientation, q);
   tf::Quaternion q;
-  tf::quaternionMsgToTF(ps_world_goal.orientation, q);
-  double yaw_world = tf::getYaw(q);
+  tf::quaternionMsgToTF(ps_odom_goal.orientation, q);
+  double yaw_odom = tf::getYaw(q);
 
   kr_tracker_msgs::LineTrackerGoal goal;
-  goal.x   = ps_world_goal.position.x;
-  goal.y   = ps_world_goal.position.y;
-  goal.z   = ps_world_goal.position.z;
-  goal.yaw = yaw_world;
+  goal.x   = ps_odom_goal.position.x;
+  goal.y   = ps_odom_goal.position.y;
+  goal.z   = ps_odom_goal.position.z;
+  goal.yaw = yaw_odom;
   goal.duration = duration;
   goal.t_start = t_start;
   goal.v_des = v_des;
@@ -500,7 +500,7 @@ bool TAGManager::goToTimed(float x, float y, float z, float yaw, float v_des, fl
     }
   }
 
-  // TODO aw: make this work with tag origin by going through common goto function
+  // TODO aw: make this work with tag origin by going through global goto function
   kr_tracker_msgs::LineTrackerGoal goal;
   goal.x   = x;
   goal.y   = y;
