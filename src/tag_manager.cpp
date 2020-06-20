@@ -10,8 +10,10 @@
 #include <std_msgs/Empty.h>
 #include <std_msgs/UInt8.h>
 #include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf/transform_datatypes.h>
 #include <actionlib/client/simple_action_client.h>
+#include <angles/angles.h>
 
 // quadrotor_control
 #include <kr_tracker_msgs/Transition.h>
@@ -102,12 +104,12 @@ void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr&
   //   ps_cam_tag.position.y,
   //   ps_cam_tag.position.z);
 
-  geometry_msgs::TransformStamped tf_odom_cam;
+  geometry_msgs::TransformStamped gtfs_odom_cam;
   ros::Time cur = ros::Time::now();
   try
   {
     //tf_odom_cam = tf_buffer_.lookupTransform(odom_frame_, msg->header.frame_id, msg->header.stamp);
-    tf_odom_cam = tf_buffer_.lookupTransform(odom_frame_, msg->header.frame_id, ros::Time(0));
+    gtfs_odom_cam = tf_buffer_.lookupTransform(odom_frame_, msg->header.frame_id, ros::Time(0));
 
   }
   catch(tf2::TransformException &ex)
@@ -117,21 +119,21 @@ void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr&
   }
 
   geometry_msgs::Pose ps_odom_tag; //Tag pose in odom frame
-  tf2::doTransform(ps_cam_tag, ps_odom_tag, tf_odom_cam);
+  tf2::doTransform(ps_cam_tag, ps_odom_tag, gtfs_odom_cam);
 
-  geometry_msgs::TransformStamped tf_odom_tag;
+  geometry_msgs::TransformStamped gtfs_odom_tag;
 
-  tf_odom_tag.header.stamp = msg->header.stamp;
-  tf_odom_tag.header.frame_id = odom_frame_;
-  tf_odom_tag.child_frame_id = global_frame_;
+  gtfs_odom_tag.header.stamp = msg->header.stamp;
+  gtfs_odom_tag.header.frame_id = odom_frame_;
+  gtfs_odom_tag.child_frame_id = global_frame_;
 
-  tf_odom_tag.transform.translation.x = ps_odom_tag.position.x;
-  tf_odom_tag.transform.translation.y = ps_odom_tag.position.y;
-  tf_odom_tag.transform.translation.z = ps_odom_tag.position.z;
-  tf_odom_tag.transform.rotation = ps_odom_tag.orientation;
+  gtfs_odom_tag.transform.translation.x = ps_odom_tag.position.x;
+  gtfs_odom_tag.transform.translation.y = ps_odom_tag.position.y;
+  gtfs_odom_tag.transform.translation.z = ps_odom_tag.position.z;
+  gtfs_odom_tag.transform.rotation = ps_odom_tag.orientation;
 
   //send the transform
-  tf_broadcaster_.sendTransform(tf_odom_tag);
+  tf_broadcaster_.sendTransform(gtfs_odom_tag);
 
 
   // ROS_INFO("Tag in %s frame: lin = (%2.2f, %2.2f, %2.2f)",
@@ -171,26 +173,46 @@ void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr&
 
   //Publish transform odom to origin
 
-  do_ekf(ps_odom_tag);
+  do_ekf(ps_odom_tag, gtfs_odom_tag);
 
 }
 
-void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag)
+void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::TransformStamped& gtfs_odom_tag)
 {
 
   ROS_INFO_STREAM("tag" << ps_odom_tag);
 
+  tf::Quaternion q;
+  tf::quaternionMsgToTF(ps_odom_tag.orientation, q);
+  double yaw_odom_tag = tf::getYaw(q);
+
+  ROS_INFO_STREAM("yaw " << angles::to_degrees(yaw_odom_tag));
+
+  tf2::Stamped< tf2::Transform > tf2_odom_tag;
+  tf2::fromMsg(gtfs_odom_tag, tf2_odom_tag);
+
+  //ROS_INFO_STREAM("rot " << tf2_odom_tag.getBasis());
+
   if(!gtsam_init_)
   {
     // Create the Kalman Filter initialization point
-    gtsam::Point3 x_initial(ps_odom_tag.position.x, ps_odom_tag.position.y, ps_odom_tag.position.z);
-    gtsam::SharedDiagonal P_initial = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.1, 0.1, 0.1));
+    gtsam::Point3 pt_initial(ps_odom_tag.position.x, ps_odom_tag.position.y, ps_odom_tag.position.z);
+
+    gtsam::Rot3 rot_initial(tf2_odom_tag.getBasis()[0][0], tf2_odom_tag.getBasis()[0][1], tf2_odom_tag.getBasis()[0][2],
+                            tf2_odom_tag.getBasis()[1][0], tf2_odom_tag.getBasis()[1][1], tf2_odom_tag.getBasis()[1][2],
+                            tf2_odom_tag.getBasis()[2][0], tf2_odom_tag.getBasis()[2][1], tf2_odom_tag.getBasis()[2][2]);
+
+    gtsam::Pose3 x_initial(rot_initial,pt_initial);
+
+    gtsam::Vector6 poseNoise_initial;
+    poseNoise_initial << (gtsam::Vector3::Constant(0.2), gtsam::Vector3::Constant(0.5));// 0.2 rad on roll,pitch,yaw and 50cm std on x,y,z
+    gtsam::SharedDiagonal P_initial = gtsam::noiseModel::Diagonal::Sigmas(poseNoise_initial, true);
 
     // Create Key for initial pose
     gtsam::Symbol x0('x',symbol_cnt_);
 
     // Create an ExtendedKalmanFilter object
-    ekf_.reset(new gtsam::ExtendedKalmanFilter<gtsam::Point3>(x0, x_initial, P_initial));
+    ekf_.reset(new gtsam::ExtendedKalmanFilter<gtsam::Pose3>(x0, x_initial, P_initial));
 
     gtsam_init_ = true;
 
@@ -212,24 +234,33 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag)
   // For the purposes of this example, let us assume we are using a constant-position model and
   // the controls are driving the point to the right at 1 m/s. Then, F = [1 0 ; 0 1], B = [1 0 ; 0 1]
   // and u = [1 ; 0]. Let us also assume that the process noise Q = [0.1 0 ; 0 0.1].
-  gtsam::Vector u = gtsam::Vector3(0.0, 0.0, 0.0);
-  gtsam::SharedDiagonal Q = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.1, 0.1, 0.1), true);
+
+  //gtsam::Vector6 u;
+  //u << (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+
+  gtsam::Vector6 process_noise;
+  process_noise << (gtsam::Vector3::Constant(0.05), gtsam::Vector3::Constant(0.1)); // 0.05 rad on roll,pitch,yaw and 10cm std on x,y,z
+  gtsam::SharedDiagonal Q = gtsam::noiseModel::Diagonal::Sigmas(process_noise, true);
 
   gtsam::Symbol x0('x',symbol_cnt_ - 1);
 
   // This simple motion can be modeled with a BetweenFactor
   // Create Key for next pose
   gtsam::Symbol x1('x',symbol_cnt_);
+
   // Predict delta based on controls
-  gtsam::Point3 difference(0,0,0);
+  gtsam::Point3 pt_diff(0, 0, 0);
+  gtsam::Rot3 rot_diff(0, 0, 0,
+                       0, 0, 0,
+                       0, 0, 0);
+  gtsam::Pose3 difference(rot_diff,pt_diff);
+
   // Create Factor
-  gtsam::BetweenFactor<gtsam::Point3> factor1(x0, x1, difference, Q);
+  gtsam::BetweenFactor<gtsam::Pose3> factor1(x0, x1, difference, Q);
 
   // Predict the new value with the EKF class
-  gtsam::Point3 x1_predict = ekf_->predict(factor1);
-  gtsam::traits<gtsam::Point3>::Print(x1_predict, "X1 Predict");
-
-
+  gtsam::Pose3 x1_predict = ekf_->predict(factor1);
+  gtsam::traits<gtsam::Pose3>::Print(x1_predict, "X1 Predict");
 
   // Now, a measurement, z1, has been received, and the Kalman Filter should be "Updated"/"Corrected"
   // This is equivalent to saying P(x1|z1) ~ P(z1|x1)*P(x1)
@@ -240,17 +271,27 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag)
   // For the purposes of this example, let us assume we have something like a GPS that returns
   // the current position of the robot. Then H = [1 0 ; 0 1]. Let us also assume that the measurement noise
   // R = [0.25 0 ; 0 0.25].
-  gtsam::SharedDiagonal R = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.2, 0.2, 0.2), true);
+  gtsam::Vector6 measurement_noise;
+  measurement_noise << (gtsam::Vector3::Constant(0.05), gtsam::Vector3::Constant(0.1)); // 0.05 rad on roll,pitch,yaw and 10cm std on x,y,z
+  gtsam::SharedDiagonal R = gtsam::noiseModel::Diagonal::Sigmas(measurement_noise, true);
 
   // This simple measurement can be modeled with a PriorFactor
-  gtsam::Point3 z1(ps_odom_tag.position.x, ps_odom_tag.position.y, ps_odom_tag.position.z);
-  gtsam::PriorFactor<gtsam::Point3> factor2(x1, z1, R);
+  gtsam::Point3 z_pt(ps_odom_tag.position.x, ps_odom_tag.position.y, ps_odom_tag.position.z);
+
+  gtsam::Rot3 z_rot(tf2_odom_tag.getBasis()[0][0], tf2_odom_tag.getBasis()[0][1], tf2_odom_tag.getBasis()[0][2],
+                    tf2_odom_tag.getBasis()[1][0], tf2_odom_tag.getBasis()[1][1], tf2_odom_tag.getBasis()[1][2],
+                    tf2_odom_tag.getBasis()[2][0], tf2_odom_tag.getBasis()[2][1], tf2_odom_tag.getBasis()[2][2]);
+
+  gtsam::Pose3 z1(z_rot,z_pt);
+
+  gtsam::PriorFactor<gtsam::Pose3> factor2(x1, z1, R);
 
   // Update the Kalman Filter with the measurement
-  gtsam::Point3 x1_update = ekf_->update(factor2);
-  gtsam::traits<gtsam::Point3>::Print(x1_update, "X1 Update");
+  gtsam::Pose3 x1_update = ekf_->update(factor2);
+  gtsam::traits<gtsam::Pose3>::Print(x1_update, "X1 Update");
 
   symbol_cnt_++;
+
 }
 
 bool TAGManager::goTo_cb(kr_mav_manager::Vec4::Request &req, kr_mav_manager::Vec4::Response &res)

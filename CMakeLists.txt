@@ -23,6 +23,7 @@ find_package(catkin REQUIRED
   kr_tracker_msgs
   apriltag_msgs
   tf2_ros
+  tf2_geometry_msgs
 )
 
 find_package(Eigen3 REQUIRED)
@@ -47,6 +48,8 @@ catkin_package(
     kr_tracker_msgs
     apriltag_msgs
     tf2_ros
+    tf2_geometry_msgs
+    angles
 #  DEPENDS system_lib
 )
 

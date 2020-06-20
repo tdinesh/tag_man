@@ -31,8 +31,8 @@
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/BetweenFactor.h>
-#include <gtsam/geometry/Point2.h>
 #include <gtsam/geometry/Point3.h>
+#include <gtsam/geometry/Pose3.h>
 
 class TAGManager
 {
@@ -72,7 +72,7 @@ class TAGManager
 
     void cmd_vel_cb(const geometry_msgs::Twist::ConstPtr &msg);
 
-    void do_ekf(geometry_msgs::Pose& ps_cam_tag);
+    void do_ekf(geometry_msgs::Pose& ps_cam_tag, geometry_msgs::TransformStamped& gtfs_odom_tag);
 
     ros::NodeHandle nh_;
     ros::NodeHandle priv_nh_;
@@ -116,7 +116,7 @@ class TAGManager
 
     bool gtsam_init_;
 
-    std::unique_ptr<gtsam::ExtendedKalmanFilter<gtsam::Point3> > ekf_;
+    std::unique_ptr<gtsam::ExtendedKalmanFilter<gtsam::Pose3> > ekf_;
 
     int symbol_cnt_;
 };
