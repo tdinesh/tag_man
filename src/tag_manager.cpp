@@ -183,14 +183,14 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_world_tag)
   if(!gtsam_init_)
   {
     // Create the Kalman Filter initialization point
-    gtsam::Point2 x_initial(ps_world_tag.position.x, ps_world_tag.position.y);
-    gtsam::SharedDiagonal P_initial = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(0.1, 0.1));
+    gtsam::Point3 x_initial(ps_world_tag.position.x, ps_world_tag.position.y, ps_world_tag.position.z);
+    gtsam::SharedDiagonal P_initial = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.1, 0.1, 0.1));
 
     // Create Key for initial pose
     gtsam::Symbol x0('x',symbol_cnt_);
 
     // Create an ExtendedKalmanFilter object
-    ekf_.reset(new gtsam::ExtendedKalmanFilter<gtsam::Point2>(x0, x_initial, P_initial));
+    ekf_.reset(new gtsam::ExtendedKalmanFilter<gtsam::Point3>(x0, x_initial, P_initial));
 
     gtsam_init_ = true;
 
@@ -212,8 +212,8 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_world_tag)
   // For the purposes of this example, let us assume we are using a constant-position model and
   // the controls are driving the point to the right at 1 m/s. Then, F = [1 0 ; 0 1], B = [1 0 ; 0 1]
   // and u = [1 ; 0]. Let us also assume that the process noise Q = [0.1 0 ; 0 0.1].
-  gtsam::Vector u = gtsam::Vector2(0.0, 0.0);
-  gtsam::SharedDiagonal Q = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(0.1, 0.1), true);
+  gtsam::Vector u = gtsam::Vector3(0.0, 0.0, 0.0);
+  gtsam::SharedDiagonal Q = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.1, 0.1, 0.1), true);
 
   gtsam::Symbol x0('x',symbol_cnt_ - 1);
 
@@ -221,13 +221,13 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_world_tag)
   // Create Key for next pose
   gtsam::Symbol x1('x',symbol_cnt_);
   // Predict delta based on controls
-  gtsam::Point2 difference(0,0);
+  gtsam::Point3 difference(0,0,0);
   // Create Factor
-  gtsam::BetweenFactor<gtsam::Point2> factor1(x0, x1, difference, Q);
+  gtsam::BetweenFactor<gtsam::Point3> factor1(x0, x1, difference, Q);
 
   // Predict the new value with the EKF class
-  gtsam::Point2 x1_predict = ekf_->predict(factor1);
-  gtsam::traits<gtsam::Point2>::Print(x1_predict, "X1 Predict");
+  gtsam::Point3 x1_predict = ekf_->predict(factor1);
+  gtsam::traits<gtsam::Point3>::Print(x1_predict, "X1 Predict");
 
 
 
@@ -240,15 +240,15 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_world_tag)
   // For the purposes of this example, let us assume we have something like a GPS that returns
   // the current position of the robot. Then H = [1 0 ; 0 1]. Let us also assume that the measurement noise
   // R = [0.25 0 ; 0 0.25].
-  gtsam::SharedDiagonal R = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector2(0.25, 0.25), true);
+  gtsam::SharedDiagonal R = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3(0.2, 0.2, 0.2), true);
 
   // This simple measurement can be modeled with a PriorFactor
-  gtsam::Point2 z1(ps_world_tag.position.x, ps_world_tag.position.y);
-  gtsam::PriorFactor<gtsam::Point2> factor2(x1, z1, R);
+  gtsam::Point3 z1(ps_world_tag.position.x, ps_world_tag.position.y, ps_world_tag.position.z);
+  gtsam::PriorFactor<gtsam::Point3> factor2(x1, z1, R);
 
   // Update the Kalman Filter with the measurement
-  gtsam::Point2 x1_update = ekf_->update(factor2);
-  gtsam::traits<gtsam::Point2>::Print(x1_update, "X1 Update");
+  gtsam::Point3 x1_update = ekf_->update(factor2);
+  gtsam::traits<gtsam::Point3>::Print(x1_update, "X1 Update");
 
   symbol_cnt_++;
 }

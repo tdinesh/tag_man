@@ -32,6 +32,7 @@
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/geometry/Point2.h>
+#include <gtsam/geometry/Point3.h>
 
 class TAGManager
 {
@@ -115,7 +116,7 @@ class TAGManager
 
     bool gtsam_init_;
 
-    std::unique_ptr<gtsam::ExtendedKalmanFilter<gtsam::Point2> > ekf_;
+    std::unique_ptr<gtsam::ExtendedKalmanFilter<gtsam::Point3> > ekf_;
 
     int symbol_cnt_;
 };
