@@ -211,6 +211,9 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::Transfo
     // Create Key for initial pose
     gtsam::Symbol x0('x',symbol_cnt_);
 
+    gtsam::traits<gtsam::Pose3>::Print(x_initial, "X0 initial");
+    P_initial.print("P initial ");
+
     // Create an ExtendedKalmanFilter object
     ekf_.reset(new gtsam::ExtendedKalmanFilter<gtsam::Pose3>(x0, x_initial, P_initial));
 
@@ -218,6 +221,7 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::Transfo
 
     symbol_cnt_++;
 
+    ROS_INFO("\n GTSAM INIT");
     return;
   }
 
@@ -241,6 +245,7 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::Transfo
   gtsam::Vector6 process_noise;
   process_noise << (gtsam::Vector3::Constant(0.05), gtsam::Vector3::Constant(0.1)); // 0.05 rad on roll,pitch,yaw and 10cm std on x,y,z
   gtsam::SharedDiagonal Q = gtsam::noiseModel::Diagonal::Sigmas(process_noise, true);
+  Q->print("Q proces noise ");
 
   gtsam::Symbol x0('x',symbol_cnt_ - 1);
 
@@ -250,10 +255,11 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::Transfo
 
   // Predict delta based on controls
   gtsam::Point3 pt_diff(0, 0, 0);
-  gtsam::Rot3 rot_diff(0, 0, 0,
-                       0, 0, 0,
-                       0, 0, 0);
+  gtsam::Rot3 rot_diff(1, 0, 0,
+                       0, 1, 0,
+                       0, 0, 1);
   gtsam::Pose3 difference(rot_diff,pt_diff);
+  difference->print("difference ");
 
   // Create Factor
   gtsam::BetweenFactor<gtsam::Pose3> factor1(x0, x1, difference, Q);
@@ -274,6 +280,7 @@ void TAGManager::do_ekf(geometry_msgs::Pose& ps_odom_tag, geometry_msgs::Transfo
   gtsam::Vector6 measurement_noise;
   measurement_noise << (gtsam::Vector3::Constant(0.05), gtsam::Vector3::Constant(0.1)); // 0.05 rad on roll,pitch,yaw and 10cm std on x,y,z
   gtsam::SharedDiagonal R = gtsam::noiseModel::Diagonal::Sigmas(measurement_noise, true);
+  R->print("R measurement noise ");
 
   // This simple measurement can be modeled with a PriorFactor
   gtsam::Point3 z_pt(ps_odom_tag.position.x, ps_odom_tag.position.y, ps_odom_tag.position.z);
