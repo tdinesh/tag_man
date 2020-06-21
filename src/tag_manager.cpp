@@ -69,7 +69,7 @@ TAGManager::TAGManager(std::string ns)
 
   // Tag_swarm
   //tf_drift_global_.setIdentity();
-  global_offset_lin_.setZero();
+  //global_offset_lin_.setZero();
   global_offset_yaw_ = 0;
 
   srv_goto_ = priv_nh_.advertiseService("goTo", &TAGManager::goTo_cb, this);
@@ -197,6 +197,7 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
     // Create the Kalman Filter initialization point
     gtsam::Point3 pt_initial(trans[0], trans[1], trans[2]);
 
+
     gtsam::Rot3 rot_initial(rot[0][0], rot[0][1], rot[0][2],
                             rot[1][0], rot[1][1], rot[1][2],
                             rot[2][0], rot[2][1], rot[2][2]);
@@ -210,7 +211,8 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
     // Create Key for initial pose
     gtsam::Symbol x0('x',symbol_cnt_);
 
-    gtsam::traits<gtsam::Pose3>::Print(x_initial, "X0 initial");
+    //gtsam::traits<gtsam::Pose3>::Print(x_initial, "X0 initial");
+    x_initial.print("X0 initial");
     P_initial->print("P initial ");
 
     // Create an ExtendedKalmanFilter object
@@ -222,8 +224,8 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
 
     ROS_INFO("\n GTSAM INIT");
     return;
-  }
 
+  }
 
   // Now predict the state at t=1, i.e. argmax_{x1} P(x1) = P(x1|x0) P(x0)
   // In Kalman Filter notation, this is x_{t+1|t} and P_{t+1|t}
@@ -299,10 +301,17 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
   gtsam::Point3 t1_update = x1_update.translation();
   gtsam::Rot3 rot1_update = x1_update.rotation();
 
+  /*
   tf2::Vector3 trans_update(t1_update[0], t1_update[1], t1_update[2]);
   tf2::Matrix3x3 rot_update(rot1_update.r1()[0], rot1_update.r1()[1], rot1_update.r1()[2],
                             rot1_update.r2()[0], rot1_update.r2()[1], rot1_update.r2()[2],
                             rot1_update.r3()[0], rot1_update.r3()[1], rot1_update.r3()[2]);
+
+  */
+  tf2::Vector3 trans_update(t1_update.x(), t1_update.y(), t1_update.z());
+  tf2::Matrix3x3 rot_update(rot1_update.r1().x(), rot1_update.r1().y(), rot1_update.r1().z(),
+                            rot1_update.r2().x(), rot1_update.r2().y(), rot1_update.r2().z(),
+                            rot1_update.r3().x(), rot1_update.r3().y(), rot1_update.r3().z());
   //double ru, pu, yu;
   //rot_update.getRPY(ru, pu, yu);
   //ROS_INFO_STREAM("yaw " << angles::to_degrees(yu) << " roll " << angles::to_degrees(ru)  << " pitch " << angles::to_degrees(pu));
@@ -321,7 +330,6 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
   tf_broadcaster_.sendTransform(gtfs_odom_tag_update);
 
   ROS_INFO_STREAM(gtfs_odom_tag_update);
-
   symbol_cnt_++;
 }
 
@@ -408,6 +416,7 @@ void TAGManager::tracker_done_callback(const actionlib::SimpleClientGoalState& s
 
 void TAGManager::odometry_cb(const nav_msgs::Odometry::ConstPtr &msg)
 {
+  /*
   pos_(0) = msg->pose.pose.position.x;
   pos_(1) = msg->pose.pose.position.y;
   pos_(2) = msg->pose.pose.position.z;
@@ -418,6 +427,8 @@ void TAGManager::odometry_cb(const nav_msgs::Odometry::ConstPtr &msg)
 
   odom_q_ = Quat(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x,
                  msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
+
+  */
 
   yaw_ = tf::getYaw(msg->pose.pose.orientation);
   yaw_dot_ = msg->twist.twist.angular.z;

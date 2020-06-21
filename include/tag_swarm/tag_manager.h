@@ -3,7 +3,7 @@
 
 // Standard C++
 #include <string>
-#include <Eigen/Geometry>
+//#include <Eigen/Geometry>
 #include <array>
 
 // ROS related
@@ -27,29 +27,30 @@
 #include <kr_mav_manager/Vec4.h>
 #include <kr_mav_manager/GoalTimed.h>
 
-#include <gtsam/nonlinear/ExtendedKalmanFilter.h>
+
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/geometry/Point3.h>
 #include <gtsam/geometry/Pose3.h>
+#include <gtsam/nonlinear/ExtendedKalmanFilter.h>
 
 class TAGManager
 {
   public:
 
     // Typedefs
-    typedef Eigen::Vector2f    Vec2;
-    typedef Eigen::Vector3f    Vec3;
-    typedef Eigen::Vector4f    Vec4;
-    typedef Eigen::Quaternionf Quat;
+    //typedef Eigen::Vector2f    Vec2;
+    //typedef Eigen::Vector3f    Vec3;
+    //typedef Eigen::Vector4f    Vec4;
+    //typedef Eigen::Quaternionf Quat;
 
     TAGManager(std::string ns = "");
 
-    Vec3 global_offset_lin() { return global_offset_lin_; }
+    //Vec3 global_offset_lin() { return global_offset_lin_; }
     float global_offset_yaw() { return global_offset_yaw_; }
 
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+    //EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
   private:
     typedef actionlib::SimpleActionClient<kr_tracker_msgs::LineTrackerAction> ClientType;
@@ -98,15 +99,17 @@ class TAGManager
 
     std::string active_tracker_;
 
+    /*
     Vec3 pos_, vel_;
     Quat odom_q_;
+    */
     float yaw_, yaw_dot_;
 
     // Estimated offset from global frame measured from tag
     //tf2::Transform tf_drift_global_;
     int origin_tag_id_;
     bool global_offset_init_;
-    Vec3 global_offset_lin_;
+    //Vec3 global_offset_lin_;
     double global_offset_yaw_;
     float tag_filter_alpha_;
     // TODO aw: should the tag always be called the origin? For now yes
