@@ -72,7 +72,7 @@ class TAGManager
 
     void cmd_vel_cb(const geometry_msgs::Twist::ConstPtr &msg);
 
-    void do_ekf(geometry_msgs::Pose& ps_cam_tag, geometry_msgs::TransformStamped& gtfs_odom_tag);
+    void do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag);
 
     ros::NodeHandle nh_;
     ros::NodeHandle priv_nh_;
