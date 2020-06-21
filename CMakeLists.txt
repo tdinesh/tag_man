@@ -7,8 +7,8 @@ project(tag_swarm)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")
 
 find_package(GTSAM REQUIRED)
-message(ERROR ${GTSAM_INCLUDE_DIR})
-message(ERROR ${GTSAM_VERSION})
+#message(STATUS ${GTSAM_INCLUDE_DIR})
+#message(STATUS ${GTSAM_VERSION})
 
 find_package(catkin REQUIRED
   roscpp
