@@ -312,9 +312,9 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
 
   */
   tf2::Vector3 trans_update(t1_update.x(), t1_update.y(), t1_update.z());
-  tf2::Matrix3x3 rot_update(rot1_update.r1().x(), rot1_update.r1().y(), rot1_update.r1().z(),
-                            rot1_update.r2().x(), rot1_update.r2().y(), rot1_update.r2().z(),
-                            rot1_update.r3().x(), rot1_update.r3().y(), rot1_update.r3().z());
+  tf2::Matrix3x3 rot_update(rot1_update.r1().x(), rot1_update.r2().x(), rot1_update.r3().x(),
+                            rot1_update.r1().y(), rot1_update.r2().y(), rot1_update.r3().y(),
+                            rot1_update.r1().z(), rot1_update.r2().z(), rot1_update.r3().z());
   double ru, pu, yu;
   rot_update.getRPY(ru, pu, yu);
   ROS_INFO_STREAM("yaw " << angles::to_degrees(yu) << " roll " << angles::to_degrees(ru)  << " pitch " << angles::to_degrees(pu));
