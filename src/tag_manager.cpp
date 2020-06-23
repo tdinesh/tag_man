@@ -67,9 +67,7 @@ TAGManager::TAGManager(std::string ns)
   priv_nh_.param<std::string>("odom_frame", odom_frame_, "odom");
   priv_nh_.param<std::string>("global_frame", global_frame_, "global_origin");
 
-  // Tag_swarm
-  //tf_drift_global_.setIdentity();
-  //global_offset_lin_.setZero();
+
   global_offset_yaw_ = 0;
 
   srv_goto_ = priv_nh_.advertiseService("goTo", &TAGManager::goTo_cb, this);
@@ -138,43 +136,11 @@ void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr&
   //send the transform
   //tf_broadcaster_.sendTransform(gtfs_odom_tag);
 
-
   // ROS_INFO("Tag in %s frame: lin = (%2.2f, %2.2f, %2.2f)",
   //   odom_frame_.c_str(),
   //   ps_odom_tag.position.x,
   //   ps_odom_tag.position.y,
   //   ps_odom_tag.position.z);
-
-/*
-  if (!global_offset_init_){
-    tf_drift_global_ = tf_drift_global;
-    global_offset_init_ = true;
-  } else {
-    tf_drift_global_.setOrigin(
-      tf_drift_global_.getOrigin().lerp(tf_drift_global.getOrigin(), tag_filter_alpha_));
-    tf_drift_global_.setRotation(
-      tf_drift_global_.getRotation().slerp(tf_drift_global.getRotation(), tag_filter_alpha_));
-  }
-
-  // tf_drift_global_.setOrigin(tf_drift_global.getOrigin());
-  // tf_drift_global_.setRotation(tf_drift_global.getRotation());
-
-  ROS_INFO("Raw drift in global frame: lin = (%2.2f, %2.2f, %2.2f)",
-      tf_drift_global.getOrigin().getX(),
-      tf_drift_global.getOrigin().getY(),
-      tf_drift_global.getOrigin().getZ());
-
-  ROS_INFO("Filtered drift in global frame: lin = (%2.2f, %2.2f, %2.2f)",
-      tf_drift_global_.getOrigin().getX(),
-      tf_drift_global_.getOrigin().getY(),
-      tf_drift_global_.getOrigin().getZ());
-*/
-
-  //Query the tf odom -> hires
-
-  //Transform pose to odom frame
-
-  //Publish transform odom to origin
 
   do_ekf(gtfs_odom_tag);
 
@@ -249,7 +215,7 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
   gtsam::Vector6 process_noise;
   process_noise << gtsam::Vector3::Constant(0.05), gtsam::Vector3::Constant(0.1); // 0.05 rad on roll,pitch,yaw and 10cm std on x,y,z
   gtsam::SharedDiagonal Q = gtsam::noiseModel::Diagonal::Sigmas(process_noise, true);
-  //Q->print("Q proces noise ");
+  //Q->print("Q process noise ");
 
   gtsam::Symbol x0('x',symbol_cnt_ - 1);
 
@@ -304,13 +270,6 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
   gtsam::Point3 t1_update = x1_update.translation();
   gtsam::Rot3 rot1_update = x1_update.rotation();
 
-  /*
-  tf2::Vector3 trans_update(t1_update[0], t1_update[1], t1_update[2]);
-  tf2::Matrix3x3 rot_update(rot1_update.r1()[0], rot1_update.r1()[1], rot1_update.r1()[2],
-                            rot1_update.r2()[0], rot1_update.r2()[1], rot1_update.r2()[2],
-                            rot1_update.r3()[0], rot1_update.r3()[1], rot1_update.r3()[2]);
-
-  */
   tf2::Vector3 trans_update(t1_update.x(), t1_update.y(), t1_update.z());
   tf2::Matrix3x3 rot_update(rot1_update.r1().x(), rot1_update.r2().x(), rot1_update.r3().x(),
                             rot1_update.r1().y(), rot1_update.r2().y(), rot1_update.r3().y(),
@@ -322,6 +281,13 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
   tf2::Stamped< tf2::Transform > tf2_odom_tag_update;
   tf2_odom_tag_update.setOrigin(trans_update);
   tf2_odom_tag_update.setBasis(rot_update);
+
+  //Use clamped estimate?
+  tf2::Vector3 trans_update_clamped(t1_update.x(), t1_update.y(), 0.0);
+  tf2::Matrix3x3 rot_update_clamped;
+  rot_update_clamped.setRPY(0.0, 0.0, yu);
+  //tf2_odom_tag_update.setOrigin(trans_update_clamped);
+  //tf2_odom_tag_update.setBasis(rot_update_clamped);
 
   geometry_msgs::TransformStamped gtfs_odom_tag_update = tf2::toMsg(tf2_odom_tag_update);
 
@@ -419,20 +385,6 @@ void TAGManager::tracker_done_callback(const actionlib::SimpleClientGoalState& s
 
 void TAGManager::odometry_cb(const nav_msgs::Odometry::ConstPtr &msg)
 {
-  /*
-  pos_(0) = msg->pose.pose.position.x;
-  pos_(1) = msg->pose.pose.position.y;
-  pos_(2) = msg->pose.pose.position.z;
-
-  vel_(0) = msg->twist.twist.linear.x;
-  vel_(1) = msg->twist.twist.linear.y;
-  vel_(2) = msg->twist.twist.linear.z;
-
-  odom_q_ = Quat(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x,
-                 msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
-
-  */
-
   yaw_ = tf::getYaw(msg->pose.pose.orientation);
   yaw_dot_ = msg->twist.twist.angular.z;
 
@@ -446,6 +398,7 @@ void TAGManager::odometry_cb(const nav_msgs::Odometry::ConstPtr &msg)
   try
   {
     tf_global_odom = tf_buffer_.lookupTransform(global_frame_, odom_frame_, ros::Time(0));
+    //TODO Use msg->header.stamp?
   }
   catch(tf2::TransformException &ex)
   {
@@ -489,8 +442,7 @@ void TAGManager::cmd_vel_cb(const geometry_msgs::Twist::ConstPtr &msg)
   goal.linear.z = msg->linear.z;
   goal.angular.z = msg->angular.z;
 
-  //ROS_WARN("yaw %g", yaw_odom*180/3.142);
-
+  //ROS_WARN("yaw %g", anglges::to_degrees(yaw_odom));
   cmd_vel_pub_.publish(goal);
 }
 
@@ -546,206 +498,6 @@ bool TAGManager::goToTimed(float x, float y, float z, float yaw, float v_des, fl
   return this->transition(line_tracker_min_jerk);
 
 }
-
-/*
-bool TAGManager::goToTimed(float x, float y, float z, float yaw, float v_des, float a_des, bool relative, ros::Duration duration, ros::Time t_start) {
-
-  if((ros::Time::now() - last_odom_t_).toSec() > 2.0){
-    ROS_ERROR("odom not updated since %f sec", ros::Time::now() - last_odom_t_).toSec());
-    return false;
-  }
-
-  // If goal is in global frame
-  if (!relative){ // TODO aw: add 'and if odom is relative'
-    if (!global_offset_init_){
-      ROS_WARN("Commanded global goal, but the global offset hasn't been initialized");
-      return false;
-    }
-
-    // Transform the global goal into the drifted frame
-    else {
-      ROS_INFO("Go to, global frame has been init");
-      // Create tf Pose for global goal
-      tf::Vector3 goal_position_global(x,y,z);
-      tf::Quaternion goal_orientation_global;
-      goal_orientation_global.setEuler(yaw, 0, 0);
-      tf::Pose tf_goal_global(goal_orientation_global, goal_position_global);
-
-      // Transform into drift frame
-      tf::Pose tf_goal_drift;
-      tf_goal_drift = tf_drift_global_.inverse() * tf_goal_global;
-
-      // Modify the goal to command to drift frame
-      x = tf_goal_drift.getOrigin().getX();
-      y = tf_goal_drift.getOrigin().getY();
-      z = tf_goal_drift.getOrigin().getZ();
-      double yaw_new, pitch, roll;
-      tf::Matrix3x3(tf_goal_drift.getRotation()).getEulerYPR(yaw_new, pitch, roll);
-      yaw = (float)yaw_new;
-      ROS_INFO("Goal in drift frame is (%2.2f, %2.2f, %2.2f, %2.2f)", x, y, z, yaw);
-    }
-  }
-
-  // TODO aw: make this work with tag origin by going through global goto function
-  kr_tracker_msgs::LineTrackerGoal goal;
-  goal.x   = x;
-  goal.y   = y;
-  goal.z   = z;
-  goal.yaw = yaw;
-  goal.duration = duration;
-  goal.t_start = t_start;
-  goal.v_des = v_des;
-  goal.a_des = a_des;
-  goal.relative = relative;
-
-  line_tracker_min_jerk_client_.sendGoal(goal, boost::bind(&TAGManager::tracker_done_callback, this, _1, _2),
-                                         ClientType::SimpleActiveCallback(), ClientType::SimpleFeedbackCallback());
-  ROS_INFO("Going to {%2.2f, %2.2f, %2.2f, %2.2f}%s with duration %2.2f", x, y, z, yaw,
-           (relative ? " relative to the current position." : ""), duration.toSec());
-
-  return this->transition(line_tracker_min_jerk);
-}
-*/
-/*
-void TAGManager::odometry_cb(const nav_msgs::Odometry::ConstPtr &msg) {
-  pos_(0) = msg->pose.pose.position.x;
-  pos_(1) = msg->pose.pose.position.y;
-  pos_(2) = msg->pose.pose.position.z;
-
-  vel_(0) = msg->twist.twist.linear.x;
-  vel_(1) = msg->twist.twist.linear.y;
-  vel_(2) = msg->twist.twist.linear.z;
-
-  odom_q_ = Quat(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x,
-                 msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
-
-  yaw_ = tf::getYaw(msg->pose.pose.orientation);
-  yaw_dot_ = msg->twist.twist.angular.z;
-
-  last_odom_t_ = ros::Time::now();
-
-  //Publish odometry in the tag frame
-  if (global_offset_init_){
-
-    nav_msgs::Odometry odom_tag;
-    odom_tag.header = msg->header;
-
-    //TODO populate twist correctly, use TF to transform frames.
-    odom_tag.pose.pose.position.x = tf_drift_global_.getOrigin().getX(),
-    odom_tag.pose.pose.position.y = tf_drift_global_.getOrigin().getY();
-    odom_tag.pose.pose.position.z = tf_drift_global_.getOrigin().getZ();
-
-    odom_tag.pose.pose.orientation.x = tf_drift_global_.getRotation().getX(),
-    odom_tag.pose.pose.orientation.y = tf_drift_global_.getRotation().getY();
-    odom_tag.pose.pose.orientation.z = tf_drift_global_.getRotation().getZ();
-    odom_tag.pose.pose.orientation.w = tf_drift_global_.getRotation().getW();
-
-    odom_tag_pub_.publish(odom_tag);
-  }
-}*/
-
-/*
-void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped &msg){
-
-  // TODO aw: only use the tf from hires to base_link here. Something is going wrong with the pose estimator here
-  // TODO aw: incoperate measurements into goto framework. ie what happens when I see a tag while going to a global position
-
-  // Read the tag to odom transformation
-
-  if((ros::Time::now() - last_odom_t_).toSec() > 2.0){
-    ROS_ERROR("odom not updated since %d sec", 2.0);
-    return;
-  }
-
-  tf::StampedTransform tf_tag_odom;
-  try {
-    tf_listener_.lookupTransform("/base_link", "/tag_0", ros::Time(0), tf_tag_odom);
-  } catch (tf::TransformException ex){
-    ROS_ERROR("%s", ex.what());
-    return;
-  }
-
-  ROS_INFO("Tag location is (%2.2f, %2.2f, %2.2f)",
-      tf_tag_odom.getOrigin().x(),
-      tf_tag_odom.getOrigin().y(),
-      tf_tag_odom.getOrigin().z());
-
-  //TODO make tag_bound param.
-  float tag_bound = 100;
-  if(tf_tag_odom.getOrigin().absolute().maxAxis() > tag_bound){
-    ROS_WARN("Tag detection is out of bounds");
-    return;
-  }
-
-  // Convert odom to a tf transform dtype
-  tf::Transform tf_odom_drift;
-
-  tf_odom_drift.setOrigin(tf::Vector3(pos_(0), pos_(1), pos_(2))); //Use odom timestamp or get latest odom
-  tf_odom_drift.setRotation(tf::Quaternion(
-      odom_q_.x(), odom_q_.y(), odom_q_.z(), odom_q_.w()));
-
-  ROS_INFO("Odom center is (%2.2f, %2.2f, %2.2f)",
-      tf_odom_drift.getOrigin().x(),
-      tf_odom_drift.getOrigin().y(),
-      tf_odom_drift.getOrigin().z());
-
-  tf::Transform tf_tag_global;
-  tf_tag_global.setIdentity();
-
-  tf::Transform tf_drift_global;
-  tf_drift_global = tf_tag_global * tf_odom_drift * tf_tag_odom;
-  tf_drift_global = tf_drift_global.inverse();
-
-  // Determine the initial yaw offset
-  double yaw, pitch, roll;
-  tf::Matrix3x3(tf_drift_global.getRotation()).getEulerYPR(yaw, pitch, roll);
-
-  // Low pass filter the result
-  // TODO aw: get drift filter to work. Probably need to get rid of NaNs and infs
-
-  // global_offset_lin_(0) = (1.0-alpha) * global_offset_lin_(0) + alpha * tf_drift_global.getOrigin().getX();
-  // global_offset_lin_(1) = (1.0-alpha) * global_offset_lin_(1) + alpha * tf_drift_global.getOrigin().getY();
-  // global_offset_lin_(2) = (1.0-alpha) * global_offset_lin_(2) + alpha * tf_drift_global.getOrigin().getZ();
-  // global_offset_yaw_    = (1.0-alpha) * global_offset_yaw_    + alpha * yaw;
-
-
-  // TODO aw: use the filtered one here
-  // tf_drift_global_.setOrigin(tf::Vector3(global_offset_lin_(0), global_offset_lin_(1), global_offset_lin_(2)));
-  // tf_drift_global_.setRotation(tf_drift_global.getRotation());
-
-  if (!global_offset_init_){
-    tf_drift_global_ = tf_drift_global;
-    global_offset_init_ = true;
-  } else {
-    tf_drift_global_.setOrigin(
-      tf_drift_global_.getOrigin().lerp(tf_drift_global.getOrigin(), tag_filter_alpha_));
-    tf_drift_global_.setRotation(
-      tf_drift_global_.getRotation().slerp(tf_drift_global.getRotation(), tag_filter_alpha_));
-  }
-
-  // tf_drift_global_.setOrigin(tf_drift_global.getOrigin());
-  // tf_drift_global_.setRotation(tf_drift_global.getRotation());
-
-  ROS_INFO("Raw drift in global frame: lin = (%2.2f, %2.2f, %2.2f)",
-      tf_drift_global.getOrigin().getX(),
-      tf_drift_global.getOrigin().getY(),
-      tf_drift_global.getOrigin().getZ());
-
-  ROS_INFO("Filtered drift in global frame: lin = (%2.2f, %2.2f, %2.2f)",
-      tf_drift_global_.getOrigin().getX(),
-      tf_drift_global_.getOrigin().getY(),
-      tf_drift_global_.getOrigin().getZ());
-
-
-  static tf::TransformBroadcaster tf_broadcaster;
-  tf_broadcaster.sendTransform(
-      tf::StampedTransform(tf_drift_global_, ros::Time::now(), "global", "drift")); //TODO use timestamp from tag
-
-
-  // TODO aw: Update state machine accordingly
-  // TODO aw: establish protocol for large jumps. Should we replan a trajectory?
-}
-*/
 
 bool TAGManager::transition(const std::string &tracker_str)
 {
