@@ -62,9 +62,9 @@ tmux split-window -t $SESSION_NAME
 tmux send-keys -t $SESSION_NAME "sleep 9; roslaunch tag_swarm quad_control.launch use_vicon:=false" Enter
 
 tmux new-window -t $SESSION_NAME -n "Tag"
-tmux send-keys -t $SESSION_NAME "sleep 7; roslaunch tag_swarm tag_swarm.launch origin_tag_id:=125 origin_tag_size:=0.3" Enter
+tmux send-keys -t $SESSION_NAME "sleep 7; roslaunch tag_swarm tag_swarm.launch origin_tag_id:=126 origin_tag_size:=0.4" Enter
 tmux split-window -t $SESSION_NAME
-tmux send-keys -t $SESSION_NAME "sleep 7; rosrun trackers_manager twist_to_action.py __ns:=${MAV_NAME}" Enter
+tmux send-keys -t $SESSION_NAME "sleep 7; rosrun kr_trackers twist_to_velocity_goal.py __ns:=${MAV_NAME}" Enter
 
 tmux new-window -t $SESSION_NAME -n "Aux"
 tmux send-keys -t $SESSION_NAME "sleep 12; roslaunch snavquad_interface snav_vio_overlay.launch" Enter

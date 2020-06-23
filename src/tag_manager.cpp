@@ -47,7 +47,7 @@ TAGManager::TAGManager(std::string ns)
   }
 
   odom_tag_pub_ = nh_.advertise<nav_msgs::Odometry>("odom_tag", 10);
-  //odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("odom", 1, boost::bind(&TAGManager::odometry_cb, this, _1));
+  odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("odom", 1, boost::bind(&TAGManager::odometry_cb, this, _1));
 
   traj_sub_ = nh_.subscribe<kr_tracker_msgs::TrajectoryTrackerGoal>("traj", 1, boost::bind(&TAGManager::traj_cb, this, _1));
 
@@ -94,7 +94,10 @@ void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr&
   }
 
   if(!found_tag)
+  {
+    ROS_WARN_THROTTLE(1, "Tag Num %d not found", origin_tag_id_);
     return;
+  }
 
   geometry_msgs::Pose ps_cam_tag; //Tag pose in camera frame
   ps_cam_tag = msg->posearray.poses[tag_ind];
@@ -108,8 +111,8 @@ void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr&
   ros::Time cur = ros::Time::now();
   try
   {
-    //tf_odom_cam = tf_buffer_.lookupTransform(odom_frame_, msg->header.frame_id, msg->header.stamp);
-    gtfs_odom_cam = tf_buffer_.lookupTransform(odom_frame_, msg->header.frame_id, ros::Time(0));
+    gtfs_odom_cam = tf_buffer_.lookupTransform(odom_frame_, msg->header.frame_id, msg->header.stamp);
+    //gtfs_odom_cam = tf_buffer_.lookupTransform(odom_frame_, msg->header.frame_id, ros::Time(0));
 
   }
   catch(tf2::TransformException &ex)
@@ -188,9 +191,9 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
   tf2::Vector3 trans = tf2_odom_tag.getOrigin();
   tf2::Matrix3x3 rot = tf2_odom_tag.getBasis();
 
-  //double r, p, y;
-  //rot.getRPY(r, p, y);
-  //ROS_INFO_STREAM("yaw " << angles::to_degrees(y) << " roll " << angles::to_degrees(r)  << " pitch " << angles::to_degrees(p));
+  double r, p, y;
+  rot.getRPY(r, p, y);
+  ROS_INFO_STREAM("yaw " << angles::to_degrees(y) << " roll " << angles::to_degrees(r)  << " pitch " << angles::to_degrees(p));
 
   if(!gtsam_init_)
   {
@@ -312,9 +315,9 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
   tf2::Matrix3x3 rot_update(rot1_update.r1().x(), rot1_update.r1().y(), rot1_update.r1().z(),
                             rot1_update.r2().x(), rot1_update.r2().y(), rot1_update.r2().z(),
                             rot1_update.r3().x(), rot1_update.r3().y(), rot1_update.r3().z());
-  //double ru, pu, yu;
-  //rot_update.getRPY(ru, pu, yu);
-  //ROS_INFO_STREAM("yaw " << angles::to_degrees(yu) << " roll " << angles::to_degrees(ru)  << " pitch " << angles::to_degrees(pu));
+  double ru, pu, yu;
+  rot_update.getRPY(ru, pu, yu);
+  ROS_INFO_STREAM("yaw " << angles::to_degrees(yu) << " roll " << angles::to_degrees(ru)  << " pitch " << angles::to_degrees(pu));
 
   tf2::Stamped< tf2::Transform > tf2_odom_tag_update;
   tf2_odom_tag_update.setOrigin(trans_update);
@@ -446,7 +449,7 @@ void TAGManager::odometry_cb(const nav_msgs::Odometry::ConstPtr &msg)
   }
   catch(tf2::TransformException &ex)
   {
-    ROS_WARN("%s",ex.what());
+    ROS_WARN_THROTTLE(1, "%s",ex.what());
     return;
   }
 
