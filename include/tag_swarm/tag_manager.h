@@ -79,6 +79,7 @@ class TAGManager
     ros::NodeHandle priv_nh_;
 
     ros::Publisher odom_tag_pub_, cmd_vel_pub_;
+    ros::Publisher ekf_meas_pub_, ekf_up_pub_;
     ros::Time last_odom_t_;
 
     tf2_ros::Buffer tf_buffer_;
@@ -122,6 +123,7 @@ class TAGManager
     std::unique_ptr<gtsam::ExtendedKalmanFilter<gtsam::Pose3> > ekf_;
 
     int symbol_cnt_;
+    bool clamp_tag_;
 };
 
 #endif /* TAG_MANAGER_H */

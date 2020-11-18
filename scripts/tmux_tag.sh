@@ -20,7 +20,7 @@ fi
 #Check if sudo
 tmux_sudo_suffix=''
 if [ "$(whoami)" != "root" ]; then
-  echo "Run script as sudo"
+  echo "Run 'sudo -s' and then run the script"
   tmux_sudo_suffix='sudo -s'
   exit 1
 fi
@@ -62,12 +62,19 @@ tmux split-window -t $SESSION_NAME
 tmux send-keys -t $SESSION_NAME "sleep 9; roslaunch tag_swarm quad_control.launch use_vicon:=false" Enter
 
 tmux new-window -t $SESSION_NAME -n "Tag"
-tmux send-keys -t $SESSION_NAME "sleep 7; roslaunch tag_swarm tag_swarm.launch origin_tag_id:=126 origin_tag_size:=0.4" Enter
+tmux send-keys -t $SESSION_NAME "sleep 7; roslaunch tag_swarm tag_swarm.launch clamp_tag:=true origin_tag_id:=126 origin_tag_size:=0.4" Enter
 tmux split-window -t $SESSION_NAME
 tmux send-keys -t $SESSION_NAME "sleep 7; rosrun kr_trackers twist_to_velocity_goal.py __ns:=${MAV_NAME}" Enter
 
+tmux new-window -t $SESSION_NAME -n "Cams"
+tmux send-keys -t $SESSION_NAME "sleep 12; roslaunch snavquad_interface stereo.launch"
+tmux split-window -t $SESSION_NAME
+tmux send-keys -t $SESSION_NAME "sleep 12; roslaunch snavquad_interface hires.launch"
+
 tmux new-window -t $SESSION_NAME -n "Aux"
-tmux send-keys -t $SESSION_NAME "sleep 12; roslaunch snavquad_interface snav_vio_overlay.launch" Enter
+tmux send-keys -t $SESSION_NAME "sleep 12; roslaunch snavquad_interface snav_vio_overlay.launch"
+tmux split-window -t $SESSION_NAME
+tmux send-keys -t $SESSION_NAME "roscd snavquad_interface/scripts/capture; ./record.sh $MAV_ID"
 #tmux select-layout -t $SESSION_NAME tiled
 
 tmux new-window -t $SESSION_NAME -n "Kill"

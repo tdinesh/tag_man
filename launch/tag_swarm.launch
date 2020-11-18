@@ -11,6 +11,7 @@
 
   <arg name="origin_tag_id" default="120"/>
   <arg name="origin_tag_size" default="0.15"/>
+  <arg name="clamp_tag" default="false"/>
 
   <include file="$(find kr_multi_mav_manager)/launch/dragonfly/multimaster_dragonfly_remote.launch">
     <arg name="mav_name" value="$(arg mav_name)"/>
@@ -37,6 +38,7 @@
       <param name="origin_tag_size" value="$(arg origin_tag_size)"/>
       <param name="odom_frame" value="odom"/>
       <param name="global_frame" value="global_origin"/>
+      <param name="clamp_tag" value="$(arg clamp_tag)"/>
     </node>
 
     <!--

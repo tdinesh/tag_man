@@ -29,6 +29,7 @@
       <param name="odom_frame" value="odom"/>
       <param name="global_frame" value="global_origin"/>
 
+      <param name="clamp_tag" value="false"/>
     </node>
 
     <node name="dfc_republish" type="republish" pkg="image_transport" output="screen" args="compressed in:=$(arg cam_name)/image_raw raw out:=$(arg cam_name)/image_raw" />

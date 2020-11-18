@@ -67,12 +67,15 @@ TAGManager::TAGManager(std::string ns)
   priv_nh_.param<std::string>("odom_frame", odom_frame_, "odom");
   priv_nh_.param<std::string>("global_frame", global_frame_, "global_origin");
 
+  priv_nh_.param("clamp_tag", clamp_tag_, false);
 
   global_offset_yaw_ = 0;
 
   srv_goto_ = priv_nh_.advertiseService("goTo", &TAGManager::goTo_cb, this);
   srv_goto_timed_ = priv_nh_.advertiseService("goToTimed", &TAGManager::goToTimed_cb, this);
 
+  ekf_meas_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("ekf_measurement", 2);
+  ekf_up_pub_ =  nh_.advertise<geometry_msgs::PoseStamped>("ekf_update", 2);
 }
 
 void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr& msg)
@@ -132,6 +135,11 @@ void TAGManager::tag_pose_cb(const apriltag_msgs::ApriltagPoseStamped::ConstPtr&
   gtfs_odom_tag.transform.translation.y = ps_odom_tag.position.y;
   gtfs_odom_tag.transform.translation.z = ps_odom_tag.position.z;
   gtfs_odom_tag.transform.rotation = ps_odom_tag.orientation;
+
+  geometry_msgs::PoseStamped ekf_meas;
+  ekf_meas.header = gtfs_odom_tag.header;
+  ekf_meas.pose = ps_odom_tag;
+  ekf_meas_pub_.publish(ekf_meas);
 
   //send the transform
   //tf_broadcaster_.sendTransform(gtfs_odom_tag);
@@ -279,15 +287,20 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
   ROS_INFO_STREAM("yaw " << angles::to_degrees(yu) << " roll " << angles::to_degrees(ru)  << " pitch " << angles::to_degrees(pu));
 
   tf2::Stamped< tf2::Transform > tf2_odom_tag_update;
-  tf2_odom_tag_update.setOrigin(trans_update);
-  tf2_odom_tag_update.setBasis(rot_update);
+  if(!clamp_tag_)
+  {
+    tf2_odom_tag_update.setOrigin(trans_update);
+    tf2_odom_tag_update.setBasis(rot_update);
+  }
+  else
+  {
+    tf2::Vector3 trans_update_clamped(t1_update.x(), t1_update.y(), 0.0);
+    tf2::Matrix3x3 rot_update_clamped;
+    rot_update_clamped.setRPY(0.0, 0.0, yu);
 
-  //Use clamped estimate?
-  tf2::Vector3 trans_update_clamped(t1_update.x(), t1_update.y(), 0.0);
-  tf2::Matrix3x3 rot_update_clamped;
-  rot_update_clamped.setRPY(0.0, 0.0, yu);
-  //tf2_odom_tag_update.setOrigin(trans_update_clamped);
-  //tf2_odom_tag_update.setBasis(rot_update_clamped);
+    tf2_odom_tag_update.setOrigin(trans_update_clamped);
+    tf2_odom_tag_update.setBasis(rot_update_clamped);
+  }
 
   geometry_msgs::TransformStamped gtfs_odom_tag_update = tf2::toMsg(tf2_odom_tag_update);
 
@@ -297,6 +310,14 @@ void TAGManager::do_ekf(geometry_msgs::TransformStamped& gtfs_odom_tag)
 
   //send the transform
   tf_broadcaster_.sendTransform(gtfs_odom_tag_update);
+
+  geometry_msgs::PoseStamped ekf_up;
+  ekf_up.header = gtfs_odom_tag_update.header;
+  ekf_up.pose.position.x = gtfs_odom_tag_update.transform.translation.x;
+  ekf_up.pose.position.y = gtfs_odom_tag_update.transform.translation.y;
+  ekf_up.pose.position.z = gtfs_odom_tag_update.transform.translation.z;
+  ekf_up.pose.orientation = gtfs_odom_tag_update.transform.rotation;
+  ekf_up_pub_.publish(ekf_up);
 
   ROS_INFO_STREAM(gtfs_odom_tag_update);
   symbol_cnt_++;
@@ -412,6 +433,7 @@ void TAGManager::odometry_cb(const nav_msgs::Odometry::ConstPtr &msg)
   //Publish odometry in the global_frame
   nav_msgs::Odometry odom_tag;
   odom_tag.header = msg->header;
+  odom_tag.header.frame_id = global_frame_;
 
   //TODO populate twist correctly
   odom_tag.pose.pose = ps_global_odom,
