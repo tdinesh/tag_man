@@ -13,9 +13,11 @@
   <arg name="origin_tag_size" default="0.15"/>
   <arg name="clamp_tag" default="false"/>
 
+  <!--
   <include file="$(find kr_multi_mav_manager)/launch/dragonfly/multimaster_dragonfly_remote.launch">
     <arg name="mav_name" value="$(arg mav_name)"/>
-  </include>
+    <arg name="old_api" value="false"/>
+  </include> -->
 
   <!--
   <include file="$(find snavquad_interface)/launch/snav_tf_pub.launch">

@@ -60,3 +60,14 @@ target_link_libraries(tag_manager gtsam ${catkin_LIBRARIES})
 
 add_executable(tag_search src/tag_search.cpp)
 target_link_libraries(tag_search ${catkin_LIBRARIES})
+
+## Mark executables and/or libraries for installation
+install(TARGETS tag_manager tag_search
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+## Mark cpp header files for installation
+install(DIRECTORY launch/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch)
+install(DIRECTORY config/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/config)

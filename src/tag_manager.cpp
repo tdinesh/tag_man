@@ -19,8 +19,8 @@
 #include <kr_tracker_msgs/Transition.h>
 
 // Strings
-static const std::string line_tracker_min_jerk("std_trackers/LineTrackerMinJerk");
-static const std::string traj_tracker("std_trackers/TrajectoryTracker");
+static const std::string line_tracker_min_jerk("kr_trackers/LineTrackerMinJerk");
+static const std::string traj_tracker("kr_trackers/TrajectoryTracker");
 
 // Constructor (init)
 TAGManager::TAGManager(std::string ns)
