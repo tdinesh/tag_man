@@ -38,7 +38,7 @@
       <rosparam file="$(find tag_swarm)/config/tag_swarm_params.yaml" />
       <param name="origin_tag_id" value="$(arg origin_tag_id)"/>
       <param name="origin_tag_size" value="$(arg origin_tag_size)"/>
-      <param name="odom_frame" value="odom"/>
+      <param name="odom_frame" value="$(arg mav_name)/odom"/>
       <param name="global_frame" value="global_origin"/>
       <param name="clamp_tag" value="$(arg clamp_tag)"/>
     </node>
